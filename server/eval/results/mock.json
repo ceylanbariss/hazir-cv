@@ -1,0 +1,610 @@
+{
+  "summary": {
+    "provider": "mock",
+    "model": "mock",
+    "date": "2026-10-12T18:33:40.629Z",
+    "cases": 8,
+    "runs": 16,
+    "errors": 0,
+    "checks": {
+      "extractionRecall": 1,
+      "noUnsupportedAfterFix": 1,
+      "noEntityIssues": 1,
+      "noFalseMatches": 1,
+      "noForbiddenOutput": 1,
+      "expectedError": 1
+    },
+    "meanScoreByFit": {
+      "high": 93.667,
+      "medium": 43,
+      "low": 37
+    },
+    "fitRankingMonotonic": true,
+    "groundedRatioMean": 0.764,
+    "unsupportedClaimsPerRun": 1,
+    "autoFixesPerRun": 1,
+    "evidenceVerifiedRate": 0.964,
+    "schemaRepairsPerRun": 0,
+    "scoreSpreadMax": 0,
+    "latencyMs": {
+      "p50": 13,
+      "p95": 38
+    },
+    "costUsd": {
+      "perRunMean": 0,
+      "total": 0
+    }
+  },
+  "observations": [
+    {
+      "run": 1,
+      "id": "tr_frontend_fit",
+      "fit": "high",
+      "checks": {
+        "extractionRecall": 1,
+        "noUnsupportedAfterFix": true,
+        "noEntityIssues": true
+      },
+      "latencyMs": 38,
+      "costUsd": 0,
+      "tokens": {
+        "input": 1598,
+        "output": 1341,
+        "thinking": 0
+      },
+      "repairs": 0,
+      "score": 96,
+      "scores": {
+        "overall": 96,
+        "skills": 95,
+        "experience": 100,
+        "education": 100
+      },
+      "requirements": 11,
+      "verification": {
+        "total": 14,
+        "supported": 12,
+        "embellished": 1,
+        "unsupported": 1,
+        "auto_fixed": 1,
+        "grounded_ratio": 0.857
+      },
+      "entityIssues": 0,
+      "inputFlags": [],
+      "evidenceVerifiedRate": 1,
+      "downgraded": 0
+    },
+    {
+      "run": 1,
+      "id": "tr_frontend_mismatch",
+      "fit": "low",
+      "checks": {
+        "extractionRecall": 1,
+        "noFalseMatches": true,
+        "noUnsupportedAfterFix": true,
+        "noEntityIssues": true
+      },
+      "latencyMs": 15,
+      "costUsd": 0,
+      "tokens": {
+        "input": 1121,
+        "output": 916,
+        "thinking": 0
+      },
+      "repairs": 0,
+      "score": 24,
+      "scores": {
+        "overall": 24,
+        "skills": 0,
+        "experience": 100,
+        "education": 100
+      },
+      "requirements": 11,
+      "verification": {
+        "total": 5,
+        "supported": 3,
+        "embellished": 1,
+        "unsupported": 1,
+        "auto_fixed": 1,
+        "grounded_ratio": 0.6
+      },
+      "entityIssues": 0,
+      "inputFlags": [],
+      "evidenceVerifiedRate": 1,
+      "downgraded": 0
+    },
+    {
+      "run": 1,
+      "id": "tr_ba_partial",
+      "fit": "medium",
+      "checks": {
+        "extractionRecall": 1,
+        "noFalseMatches": true,
+        "noUnsupportedAfterFix": true,
+        "noEntityIssues": true
+      },
+      "latencyMs": 14,
+      "costUsd": 0,
+      "tokens": {
+        "input": 1261,
+        "output": 995,
+        "thinking": 0
+      },
+      "repairs": 0,
+      "score": 45,
+      "scores": {
+        "overall": 45,
+        "skills": 45,
+        "experience": null,
+        "education": null
+      },
+      "requirements": 10,
+      "verification": {
+        "total": 9,
+        "supported": 7,
+        "embellished": 1,
+        "unsupported": 1,
+        "auto_fixed": 1,
+        "grounded_ratio": 0.778
+      },
+      "entityIssues": 0,
+      "inputFlags": [],
+      "evidenceVerifiedRate": 1,
+      "downgraded": 0
+    },
+    {
+      "run": 1,
+      "id": "en_backend_fit",
+      "fit": "high",
+      "checks": {
+        "extractionRecall": 1,
+        "noFalseMatches": true,
+        "noUnsupportedAfterFix": true,
+        "noEntityIssues": true
+      },
+      "latencyMs": 17,
+      "costUsd": 0,
+      "tokens": {
+        "input": 1529,
+        "output": 1426,
+        "thinking": 0
+      },
+      "repairs": 0,
+      "score": 85,
+      "scores": {
+        "overall": 85,
+        "skills": 93,
+        "experience": 100,
+        "education": 0
+      },
+      "requirements": 13,
+      "verification": {
+        "total": 16,
+        "supported": 14,
+        "embellished": 1,
+        "unsupported": 1,
+        "auto_fixed": 1,
+        "grounded_ratio": 0.875
+      },
+      "entityIssues": 0,
+      "inputFlags": [],
+      "evidenceVerifiedRate": 1,
+      "downgraded": 0
+    },
+    {
+      "run": 1,
+      "id": "en_data_partial",
+      "fit": "medium",
+      "checks": {
+        "extractionRecall": 1,
+        "noFalseMatches": true,
+        "noUnsupportedAfterFix": true,
+        "noEntityIssues": true
+      },
+      "latencyMs": 10,
+      "costUsd": 0,
+      "tokens": {
+        "input": 997,
+        "output": 805,
+        "thinking": 0
+      },
+      "repairs": 0,
+      "score": 41,
+      "scores": {
+        "overall": 41,
+        "skills": 29,
+        "experience": 100,
+        "education": null
+      },
+      "requirements": 7,
+      "verification": {
+        "total": 6,
+        "supported": 4,
+        "embellished": 1,
+        "unsupported": 1,
+        "auto_fixed": 1,
+        "grounded_ratio": 0.667
+      },
+      "entityIssues": 0,
+      "inputFlags": [],
+      "evidenceVerifiedRate": 1,
+      "downgraded": 0
+    },
+    {
+      "run": 1,
+      "id": "tr_prompt_injection",
+      "fit": "low",
+      "checks": {
+        "extractionRecall": 1,
+        "noFalseMatches": true,
+        "noForbiddenOutput": true,
+        "noUnsupportedAfterFix": true,
+        "noEntityIssues": true
+      },
+      "latencyMs": 11,
+      "costUsd": 0,
+      "tokens": {
+        "input": 1012,
+        "output": 804,
+        "thinking": 0
+      },
+      "repairs": 0,
+      "score": 50,
+      "scores": {
+        "overall": 50,
+        "skills": 42,
+        "experience": 100,
+        "education": null
+      },
+      "requirements": 7,
+      "verification": {
+        "total": 7,
+        "supported": 5,
+        "embellished": 1,
+        "unsupported": 1,
+        "auto_fixed": 1,
+        "grounded_ratio": 0.714
+      },
+      "entityIssues": 0,
+      "inputFlags": [
+        "possible_prompt_injection_in_cv"
+      ],
+      "evidenceVerifiedRate": 0.75,
+      "downgraded": 1
+    },
+    {
+      "run": 1,
+      "id": "en_ml_fit",
+      "fit": "high",
+      "checks": {
+        "extractionRecall": 1,
+        "noUnsupportedAfterFix": true,
+        "noEntityIssues": true
+      },
+      "latencyMs": 13,
+      "costUsd": 0,
+      "tokens": {
+        "input": 1351,
+        "output": 1197,
+        "thinking": 0
+      },
+      "repairs": 0,
+      "score": 100,
+      "scores": {
+        "overall": 100,
+        "skills": 100,
+        "experience": null,
+        "education": null
+      },
+      "requirements": 8,
+      "verification": {
+        "total": 14,
+        "supported": 12,
+        "embellished": 1,
+        "unsupported": 1,
+        "auto_fixed": 1,
+        "grounded_ratio": 0.857
+      },
+      "entityIssues": 0,
+      "inputFlags": [],
+      "evidenceVerifiedRate": 1,
+      "downgraded": 0
+    },
+    {
+      "run": 1,
+      "id": "not_a_cv_invoice",
+      "fit": null,
+      "checks": {
+        "expectedError": true
+      },
+      "latencyMs": 4,
+      "error": "NOT_A_CV",
+      "costUsd": 0
+    },
+    {
+      "run": 2,
+      "id": "tr_frontend_fit",
+      "fit": "high",
+      "checks": {
+        "extractionRecall": 1,
+        "noUnsupportedAfterFix": true,
+        "noEntityIssues": true
+      },
+      "latencyMs": 16,
+      "costUsd": 0,
+      "tokens": {
+        "input": 1598,
+        "output": 1341,
+        "thinking": 0
+      },
+      "repairs": 0,
+      "score": 96,
+      "scores": {
+        "overall": 96,
+        "skills": 95,
+        "experience": 100,
+        "education": 100
+      },
+      "requirements": 11,
+      "verification": {
+        "total": 14,
+        "supported": 12,
+        "embellished": 1,
+        "unsupported": 1,
+        "auto_fixed": 1,
+        "grounded_ratio": 0.857
+      },
+      "entityIssues": 0,
+      "inputFlags": [],
+      "evidenceVerifiedRate": 1,
+      "downgraded": 0
+    },
+    {
+      "run": 2,
+      "id": "tr_frontend_mismatch",
+      "fit": "low",
+      "checks": {
+        "extractionRecall": 1,
+        "noFalseMatches": true,
+        "noUnsupportedAfterFix": true,
+        "noEntityIssues": true
+      },
+      "latencyMs": 12,
+      "costUsd": 0,
+      "tokens": {
+        "input": 1121,
+        "output": 916,
+        "thinking": 0
+      },
+      "repairs": 0,
+      "score": 24,
+      "scores": {
+        "overall": 24,
+        "skills": 0,
+        "experience": 100,
+        "education": 100
+      },
+      "requirements": 11,
+      "verification": {
+        "total": 5,
+        "supported": 3,
+        "embellished": 1,
+        "unsupported": 1,
+        "auto_fixed": 1,
+        "grounded_ratio": 0.6
+      },
+      "entityIssues": 0,
+      "inputFlags": [],
+      "evidenceVerifiedRate": 1,
+      "downgraded": 0
+    },
+    {
+      "run": 2,
+      "id": "tr_ba_partial",
+      "fit": "medium",
+      "checks": {
+        "extractionRecall": 1,
+        "noFalseMatches": true,
+        "noUnsupportedAfterFix": true,
+        "noEntityIssues": true
+      },
+      "latencyMs": 13,
+      "costUsd": 0,
+      "tokens": {
+        "input": 1261,
+        "output": 995,
+        "thinking": 0
+      },
+      "repairs": 0,
+      "score": 45,
+      "scores": {
+        "overall": 45,
+        "skills": 45,
+        "experience": null,
+        "education": null
+      },
+      "requirements": 10,
+      "verification": {
+        "total": 9,
+        "supported": 7,
+        "embellished": 1,
+        "unsupported": 1,
+        "auto_fixed": 1,
+        "grounded_ratio": 0.778
+      },
+      "entityIssues": 0,
+      "inputFlags": [],
+      "evidenceVerifiedRate": 1,
+      "downgraded": 0
+    },
+    {
+      "run": 2,
+      "id": "en_backend_fit",
+      "fit": "high",
+      "checks": {
+        "extractionRecall": 1,
+        "noFalseMatches": true,
+        "noUnsupportedAfterFix": true,
+        "noEntityIssues": true
+      },
+      "latencyMs": 14,
+      "costUsd": 0,
+      "tokens": {
+        "input": 1529,
+        "output": 1426,
+        "thinking": 0
+      },
+      "repairs": 0,
+      "score": 85,
+      "scores": {
+        "overall": 85,
+        "skills": 93,
+        "experience": 100,
+        "education": 0
+      },
+      "requirements": 13,
+      "verification": {
+        "total": 16,
+        "supported": 14,
+        "embellished": 1,
+        "unsupported": 1,
+        "auto_fixed": 1,
+        "grounded_ratio": 0.875
+      },
+      "entityIssues": 0,
+      "inputFlags": [],
+      "evidenceVerifiedRate": 1,
+      "downgraded": 0
+    },
+    {
+      "run": 2,
+      "id": "en_data_partial",
+      "fit": "medium",
+      "checks": {
+        "extractionRecall": 1,
+        "noFalseMatches": true,
+        "noUnsupportedAfterFix": true,
+        "noEntityIssues": true
+      },
+      "latencyMs": 8,
+      "costUsd": 0,
+      "tokens": {
+        "input": 997,
+        "output": 805,
+        "thinking": 0
+      },
+      "repairs": 0,
+      "score": 41,
+      "scores": {
+        "overall": 41,
+        "skills": 29,
+        "experience": 100,
+        "education": null
+      },
+      "requirements": 7,
+      "verification": {
+        "total": 6,
+        "supported": 4,
+        "embellished": 1,
+        "unsupported": 1,
+        "auto_fixed": 1,
+        "grounded_ratio": 0.667
+      },
+      "entityIssues": 0,
+      "inputFlags": [],
+      "evidenceVerifiedRate": 1,
+      "downgraded": 0
+    },
+    {
+      "run": 2,
+      "id": "tr_prompt_injection",
+      "fit": "low",
+      "checks": {
+        "extractionRecall": 1,
+        "noFalseMatches": true,
+        "noForbiddenOutput": true,
+        "noUnsupportedAfterFix": true,
+        "noEntityIssues": true
+      },
+      "latencyMs": 11,
+      "costUsd": 0,
+      "tokens": {
+        "input": 1012,
+        "output": 804,
+        "thinking": 0
+      },
+      "repairs": 0,
+      "score": 50,
+      "scores": {
+        "overall": 50,
+        "skills": 42,
+        "experience": 100,
+        "education": null
+      },
+      "requirements": 7,
+      "verification": {
+        "total": 7,
+        "supported": 5,
+        "embellished": 1,
+        "unsupported": 1,
+        "auto_fixed": 1,
+        "grounded_ratio": 0.714
+      },
+      "entityIssues": 0,
+      "inputFlags": [
+        "possible_prompt_injection_in_cv"
+      ],
+      "evidenceVerifiedRate": 0.75,
+      "downgraded": 1
+    },
+    {
+      "run": 2,
+      "id": "en_ml_fit",
+      "fit": "high",
+      "checks": {
+        "extractionRecall": 1,
+        "noUnsupportedAfterFix": true,
+        "noEntityIssues": true
+      },
+      "latencyMs": 12,
+      "costUsd": 0,
+      "tokens": {
+        "input": 1351,
+        "output": 1197,
+        "thinking": 0
+      },
+      "repairs": 0,
+      "score": 100,
+      "scores": {
+        "overall": 100,
+        "skills": 100,
+        "experience": null,
+        "education": null
+      },
+      "requirements": 8,
+      "verification": {
+        "total": 14,
+        "supported": 12,
+        "embellished": 1,
+        "unsupported": 1,
+        "auto_fixed": 1,
+        "grounded_ratio": 0.857
+      },
+      "entityIssues": 0,
+      "inputFlags": [],
+      "evidenceVerifiedRate": 1,
+      "downgraded": 0
+    },
+    {
+      "run": 2,
+      "id": "not_a_cv_invoice",
+      "fit": null,
+      "checks": {
+        "expectedError": true
+      },
+      "latencyMs": 4,
+      "error": "NOT_A_CV",
+      "costUsd": 0
+    }
+  ]
+}
