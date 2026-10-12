@@ -1,16 +1,24 @@
 {
-  "name": "resumatch-backend",
-  "version": "1.0.0",
-  "description": "Backend for Resumatch",
+  "name": "hazircv-api",
+  "version": "3.0.0",
+  "description": "Hazır CV API — explainable CV ↔ job matching, grounded tailoring and interview simulation",
+  "type": "module",
   "main": "index.js",
+  "engines": {
+    "node": ">=20.11"
+  },
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "node --watch index.js",
+    "dev:mock": "LLM_PROVIDER=mock node --watch index.js",
+    "test": "node --test",
+    "eval": "node eval/run.js",
+    "eval:mock": "LLM_PROVIDER=mock node eval/run.js --out eval/results/mock.json"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.21.0",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "express": "^4.18.2"
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "zod": "^3.25.76"
   }
 }
