@@ -1,2 +1,9 @@
 node_modules
 .env
+.env.*
+!.env.example
+# Personal documents must never be committed
+CV'ler/
+*.pdf
+eval/results/*.json
+!eval/results/mock.json
