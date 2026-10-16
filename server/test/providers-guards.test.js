@@ -87,3 +87,12 @@ test('config requires a key for gemini and accepts mock without one', () => {
   assert.ok(!c.originPattern.test('https://evil.vercel.app'));
   assert.equal(loadConfig({ LLM_PROVIDER: 'gemini', GEMINI_API_KEY: '"abc" ' }).GEMINI_API_KEY, 'abc');
 });
+
+test('boolean env values are tolerant of casing, spaces and quotes', () => {
+  for (const v of ['False', ' false ', '"false"', 'FALSE', '0', 'off']) {
+    assert.equal(loadConfig({ LLM_PROVIDER: 'mock', ENABLE_LEGACY_OPTIMIZE: v }).ENABLE_LEGACY_OPTIMIZE, false, v);
+  }
+  assert.equal(loadConfig({ LLM_PROVIDER: 'mock', ENABLE_LEGACY_OPTIMIZE: 'True' }).ENABLE_LEGACY_OPTIMIZE, true);
+  assert.equal(loadConfig({ LLM_PROVIDER: 'mock' }).ENABLE_LEGACY_OPTIMIZE, false);
+  assert.throws(() => loadConfig({ LLM_PROVIDER: 'mock', ENABLE_LEGACY_OPTIMIZE: 'maybe' }), /ENABLE_LEGACY_OPTIMIZE/);
+});

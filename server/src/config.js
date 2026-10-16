@@ -2,11 +2,15 @@
 // behaviour in production is explicit and reviewable (see .env.example).
 import { z } from 'zod/v4';
 
+// Hosting dashboards make it easy to type "False", " false" or '"false"'; normalise first.
 const bool = (def) =>
-  z
-    .enum(['true', 'false', '1', '0'])
-    .default(def ? 'true' : 'false')
-    .transform((v) => v === 'true' || v === '1');
+  z.preprocess(
+    (v) => (typeof v === 'string' ? v.replace(/['"]/g, '').trim().toLowerCase() : v),
+    z
+      .enum(['true', 'false', '1', '0', 'yes', 'no', 'on', 'off'])
+      .default(def ? 'true' : 'false')
+      .transform((v) => ['true', '1', 'yes', 'on'].includes(v)),
+  );
 
 const csv = (def) =>
   z
