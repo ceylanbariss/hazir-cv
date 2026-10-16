@@ -12,6 +12,30 @@ import {
   Users, Terminal, AlertOctagon, ThumbsUp, ThumbsDown
 } from 'lucide-react';
 import ReactGA from 'react-ga4';
+import { tailorCv, interviewTurn, interviewReport as fetchInterviewReport, addItem as addItemApi, integrateGaps as integrateGapsApi, ocrJobPosting, warmUp } from './lib/api.js';
+import { claimRequirement, unclaimRequirement, interviewFocus } from './lib/analysis.js';
+import { RequirementBreakdown, VerificationPanel, PipelineTrace } from './components/AnalysisInsights.jsx';
+
+const STAGE_PROGRESS = {
+  analyze_inputs: { start: 4, done: 28 },
+  match_evidence: { start: 30, done: 52 },
+  tailor: { start: 54, done: 84 },
+  verify: { start: 86, done: 97 },
+};
+const STAGE_TEXT = {
+  tr: {
+    analyze_inputs: '🔍 İlan ve CV analiz ediliyor...',
+    match_evidence: '🧩 Gereksinimler CV\'deki kanıtlarla eşleştiriliyor...',
+    tailor: '✍️ CV ilana göre yeniden yazılıyor...',
+    verify: '🛡️ Yazılanlar orijinal CV\'ye karşı doğrulanıyor...',
+  },
+  en: {
+    analyze_inputs: '🔍 Analyzing the posting and your CV...',
+    match_evidence: '🧩 Matching requirements to evidence in your CV...',
+    tailor: '✍️ Rewriting your CV for this job...',
+    verify: '🛡️ Fact-checking the rewrite against your CV...',
+  },
+};
 
 const STOP_WORDS = [
   've', 'ile', 'için', 'bir', 'bu', 'şu', 'o', 'da', 'de', 'ki', 'mi', 'mu', 'mü', 'ama', 'fakat', 
@@ -134,6 +158,14 @@ const App = () => {
   // YENİ: Toplu CV Yedirme State'leri
   const [selectedGaps, setSelectedGaps] = useState([]);
   const [isIntegratingGaps, setIsIntegratingGaps] = useState(false);
+  const [gapConfirmOpen, setGapConfirmOpen] = useState(false);
+  const [gapNotes, setGapNotes] = useState('');
+  const [gapConfirmed, setGapConfirmed] = useState(false);
+  const [gapNotice, setGapNotice] = useState(null);
+  const [revertedClaims, setRevertedClaims] = useState([]);
+  const [interviewMax, setInterviewMax] = useState(8);
+  const [interviewEndReason, setInterviewEndReason] = useState('none');
+  const stageCeilingRef = useRef(4);
 
   const toggleGapSelection = (gap) => {
       setSelectedGaps(prev => 
@@ -203,6 +235,7 @@ const App = () => {
   useEffect(() => {
     ReactGA.initialize("G-QKFMGDH7GJ"); 
     ReactGA.send("pageview"); 
+    warmUp(); // Free-tier API sleeps when idle; wake it while the user fills the form.
   }, []);
 
   // YENİ: DİNAMİK CV YÜKSEKLİĞİNİ TAKİP ETME (Taşmaları önler)
@@ -454,6 +487,14 @@ const App = () => {
     { name: 'Midnight', hex: '#000000' }, 
   ];
 
+  const fmtScore = (v) => (v === null || v === undefined ? '—' : `%${v}`);
+
+  const RUBRIC_LABELS = {
+    communication: 'İletişim', motivation_and_fit: 'Motivasyon & Uyum', teamwork: 'Takım Çalışması',
+    self_awareness: 'Öz Farkındalık', specificity_star: 'Somutluk (STAR)', technical_depth: 'Teknik Derinlik',
+    problem_solving: 'Problem Çözme', role_fit: 'Role Uygunluk',
+  };
+
   const toUpper = (text) => {
     return text ? text.toLocaleUpperCase(cvLanguage === 'tr' ? 'tr-TR' : 'en-US') : "";
   };
@@ -585,21 +626,8 @@ const App = () => {
         })
       );
 
-      // Yapay Zekaya Gönderilecek Paket (Tüm resimler eklendi)
-      const payload = {
-        contents: [
-          {
-            parts: [
-              { text: "Bu görseller bir iş ilanının ekran görüntüleridir. Lütfen görsellerdeki tüm metni, ilan detaylarını, aranan nitelikleri ve iş tanımını eksiksiz bir şekilde birleştirerek metne dönüştür. Birden fazla görsel varsa aralarındaki akışı ve anlam bütünlüğünü koru. Sadece metni ver, ek yorum veya açıklama yapma." },
-              ...imageParts // Çevrilen tüm fotoğrafları buraya ekliyoruz
-            ]
-          }
-        ],
-        systemInstruction: { parts: [{ text: "Sen uzman bir OCR ve veri çıkarma asistanısın. Görsellerdeki iş ilanı metinlerini kusursuzca okuyup birleştirerek düz metin olarak vermelisin." }] }
-      };
-
-      const result = await callGeminiApi(payload);
-      const extractedText = result.candidates?.[0]?.content?.parts?.[0]?.text;
+      const result = await ocrJobPosting(imageParts.map((p) => p.inlineData));
+      const extractedText = result.text;
 
       if (extractedText) {
         // Okunan metni, mevcut metnin üzerine ekle
@@ -609,7 +637,7 @@ const App = () => {
       }
     } catch (err) {
       console.error("Görsel okuma hatası:", err);
-      setError("İlan görselleri okunurken bir hata oluştu. Lütfen ilanların net bir şekilde okunduğundan emin olun.");
+      setError(err.message || "İlan görselleri okunurken bir hata oluştu. Lütfen ilanların net bir şekilde okunduğundan emin olun.");
     } finally {
       setIsExtractingJob(false);
       if (jobImageInputRef.current) jobImageInputRef.current.value = ''; // Input'u sıfırla
@@ -715,31 +743,15 @@ const App = () => {
       newData[section] = list;
 
       if (section === 'skills' && newData.analysis) {
-          if (!newData.analysis.gaps) newData.analysis.gaps = [];
           if (!newData.analysis.additions) newData.analysis.additions = [];
-          if (!newData.analysis.scores) newData.analysis.scores = { overall: 0, skills: 0, experience: 0, education: 0 };
           if (!newData.analysis.gap_mapping) newData.analysis.gap_mapping = {};
-
-          // YENİ: Hafızayı kontrol et. Bu silinen yetenek, eskiden hangi "eksik cümlesiydi?"
+          // If this skill was added by the user for a requirement, that requirement becomes a gap again.
           const originalGap = newData.analysis.gap_mapping[deletedItem];
-          const textToRestore = originalGap || deletedItem;
-
-          // Eksiklere Orijinal Metniyle Geri Ekle (En başa)
-          if (!newData.analysis.gaps.includes(textToRestore)) {
-              newData.analysis.gaps.unshift(textToRestore); 
+          if (originalGap) {
+              newData.analysis = unclaimRequirement(newData.analysis, originalGap);
+              delete newData.analysis.gap_mapping[deletedItem];
           }
-          
-          newData.analysis.additions = newData.analysis.additions.filter(a => a !== deletedItem); 
-          
-          // Skoru 4 puan geri düşür
-          newData.analysis.scores.skills = Math.max(0, (newData.analysis.scores.skills || 0) - 4);
-          
-          // Matematiksel Ortalama Hesaplama
-          newData.analysis.scores.overall = Math.round(
-              ((newData.analysis.scores.skills) + 
-               (newData.analysis.scores.experience || 0) + 
-               (newData.analysis.scores.education || 0)) / 3
-          );
+          newData.analysis.additions = newData.analysis.additions.filter(a => a !== deletedItem);
       }
       return newData;
     });
@@ -781,86 +793,21 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
       newData.experience[expIndex] = targetExp;
 
       if (section === 'experience' && newData.analysis && deletedItem) {
-          if (!newData.analysis.gaps) newData.analysis.gaps = [];
           if (!newData.analysis.additions) newData.analysis.additions = [];
-          if (!newData.analysis.scores) newData.analysis.scores = { overall: 0, skills: 0, experience: 0, education: 0 };
           if (!newData.analysis.gap_mapping) newData.analysis.gap_mapping = {};
-
-          // YENİ: Hafızadan orijinal eksiği bul
+          // Only bullets the user added for a requirement change the score; the score is
+          // re-derived deterministically instead of being nudged by hand.
           const originalGap = newData.analysis.gap_mapping[deletedItem];
-
           if (originalGap) {
-              // Eğer AI'ın yedirdiği bir maddeyse, orijinal halini eksikler listesine geri at
-              if (!newData.analysis.gaps.includes(originalGap)) {
-                  newData.analysis.gaps.unshift(originalGap);
-              }
-          } else {
-              // Eğer AI'ın eklemediği, orijinal CV'de var olan bir madde siliniyorsa normal fallback davranışını yap
-              const fallbackGapText = "Eksik: " + deletedItem.substring(0, 30) + "...";
-              if (!newData.analysis.gaps.includes(fallbackGapText)) {
-                  newData.analysis.gaps.unshift(fallbackGapText); 
-              }
+              newData.analysis = unclaimRequirement(newData.analysis, originalGap);
+              delete newData.analysis.gap_mapping[deletedItem];
           }
-
-          newData.analysis.additions = newData.analysis.additions.filter(a => a !== deletedItem); 
-          
-          // Skoru 5 puan geri düşür
-          newData.analysis.scores.experience = Math.max(0, (newData.analysis.scores.experience || 0) - 5);
-          
-          newData.analysis.scores.overall = Math.round(
-              ((newData.analysis.scores.skills || 0) + 
-               (newData.analysis.scores.experience) + 
-               (newData.analysis.scores.education || 0)) / 3
-          );
+          newData.analysis.additions = newData.analysis.additions.filter(a => a !== deletedItem);
       }
 
       return newData;
     });
   };
-  const callGeminiApi = async (payload, retries = 3, backoff = 2000) => {
-    const API_URL = 'https://resumatch-backend-zsmt.onrender.com';
-    
-    try {
-      const response = await fetch(`${API_URL}/optimize`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...payload, 
-          contents: payload.contents,
-          systemInstruction: payload.systemInstruction
-        })
-      });
-    
-      if (!response.ok) {
-          const errData = await response.json().catch(() => ({})); 
-          
-          if (response.status === 503 || response.status === 429) {
-              if (retries > 0) {
-                  console.log(`Sunucu yoğun (503/429), ${backoff}ms sonra tekrar deneniyor...`);
-                  await new Promise(resolve => setTimeout(resolve, backoff));
-                  return callGeminiApi(payload, retries - 1, backoff * 2); 
-              } else {
-                  throw new Error("Google sunucuları şu an çok yoğun. Lütfen 30 saniye bekleyip tekrar deneyin.");
-              }
-          }
-          
-          throw new Error(errData.error || `API Hatası: ${response.statusText}`);
-      }
-    
-      const data = await response.json();
-      return data;
-    
-    } catch (err) {
-      console.error("API Bağlantı Hatası:", err);
-      if (retries > 0 && !err.message.includes("yoğun")) {
-         console.log(`Bağlantı hatası, tekrar deneniyor... (${retries} hak kaldı)`);
-         await new Promise(resolve => setTimeout(resolve, backoff));
-         return callGeminiApi(payload, retries - 1, backoff * 2);
-      }
-      throw err;
-    }
-  };
-
   const sanitizeData = (data) => {
       if (!data) return data;
       const clean = (str) => typeof str === 'string' ? str.replace(/\*\*/g, '') : str;
@@ -905,7 +852,7 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
       })) : [];
 
       if (newData.analysis) {
-          newData.analysis.scores = newData.analysis.scores || { overall: 50, skills: 50, experience: 50, education: 50 };
+          newData.analysis.scores = newData.analysis.scores || { overall: null, skills: null, experience: null, education: null };
           
           if (Array.isArray(newData.analysis.matches)) {
               newData.analysis.matches = { hard_skills: newData.analysis.matches, soft_skills: [] };
@@ -918,36 +865,14 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
           newData.analysis.gaps = Array.isArray(newData.analysis.gaps) ? newData.analysis.gaps.map(clean) : [];
           newData.analysis.additions = Array.isArray(newData.analysis.additions) ? newData.analysis.additions.map(clean) : [];
       } else {
-          newData.analysis = { 
-              scores: { overall: 50, skills: 50, experience: 50, education: 50 }, 
+ newData.analysis = { 
+              scores: { overall: null, skills: null, experience: null, education: null }, 
               matches: { hard_skills: [], soft_skills: [] }, 
               gaps: [], additions: [] 
           };
       }
 
       return newData;
-  };
-
-  const cleanAIResponse = (rawText) => {
-    if (!rawText) return "";
-    let cleaned = rawText.replace(/```json/gi, '').replace(/```/gi, '').trim();
-    try {
-        let parsed = JSON.parse(cleaned);
-        if (typeof parsed === 'object' && parsed !== null) {
-            const values = Object.values(parsed);
-            if (values.length > 0 && typeof values[0] === 'string') {
-                cleaned = values[0];
-            }
-        }
-    } catch (e) {
-        const match = cleaned.match(/"evaluation"\s*:\s*"([^"]+)"/i);
-        if (match && match[1]) {
-            cleaned = match[1];
-        } else {
-            cleaned = cleaned.replace(/^\{\s*"evaluation"\s*:\s*"/i, '').replace(/"\s*\}$/, '').trim();
-        }
-    }
-    return cleaned.replace(/^\{\s*|\s*\}$/g, '').trim(); 
   };
 
   const handleStartInterview = () => {
@@ -968,40 +893,36 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
     setQuestionCount(0);
     setIsInterviewFinished(false);
     setInterviewReport(null);
+    setInterviewEndReason('none');
   };
+
+  const toHistory = (messages) =>
+    messages.filter((m) => !m.isSystem).map((m) => ({ role: m.sender === 'ai' ? 'interviewer' : 'candidate', text: m.text }));
+
+  const interviewBase = (type) => ({
+    cv: originalCV,
+    jobPosting: jobDescription,
+    lang: cvLanguage,
+    type,
+    focus: interviewFocus(optimizedData?.analysis),
+  });
 
   const startInterviewSession = async (type) => {
       setInterviewType(type);
       setInterviewLoading(true);
       setQuestionCount(1);
-      setInterviewMessages([{sender: 'ai', text: 'Mülakat simülasyonu başlatılıyor, lütfen bekleyin...', isSystem: true}]);
-
-      const basePrompt = type === 'hr'
-        ? `Sen profesyonel bir İnsan Kaynakları (İK) uzmanısın. Amacın adayın iletişim becerilerini, şirket kültürüne uyumunu ve davranışsal yetkinliklerini ölçmek.`
-        : `Sen deneyimli bir Takım Liderisin (Team Lead). Amacın adayın teknik becerilerini, problem çözme yeteneğini ve projelere yaklaşımını ölçmek.`;
-
-      const systemPrompt = `${basePrompt}
-      Elimde bir aday CV'si ve bir İş İlanı var. Amacın bu adayı iş ilanı için mülakata almak.
-      
-      🛑 GÜVENLİK KONTROLÜ: Öncelikle sana verilen CV metnini kontrol et. Eğer bu metin açıkça bir özgeçmiş değilse (fatura, makale, alakasız metin vb.), mülakata kesinlikle başlama. Adaya doğrudan şunu söyle: "🚨 Yüklediğiniz doküman bir özgeçmişe benzemiyor. Mülakat yapabilmem için lütfen geçerli bir CV PDF'i yükleyin." ve mesajın sonuna [TERMINATE] etiketini koy.
-      
-      EĞER GEÇERLİ BİR CV İSE ŞU KURALLARA UY:
-      1. Adaya "Merhaba" de, kısaca rolünü belirt (İK veya Takım Lideri olarak) ve doğrudan ilk soruyu sor.
-      2. Sorular adayın CV'sindeki projelere veya iş ilanındaki gerekliliklere özel olsun.
-      3. Tek seferde SADECE BİR soru sor.
-      4. KESİNLİKLE JSON FORMATI KULLANMA. Süslü parantez {}, "evaluation" gibi yazılım kodları ASLA kullanma. Sadece doğrudan, doğal bir insan gibi konuşarak cevap ver.
-      5. Toplamda yaklaşık 10 soruluk bir mülakat olacak. (Şu an 1. sorudasın).`;
-
+      setInterviewMessages([{sender: 'ai', text: cvLanguage === 'en' ? 'Starting the mock interview, please wait...' : 'Mülakat simülasyonu başlatılıyor, lütfen bekleyin...', isSystem: true}]);
       try {
-          const result = await callGeminiApi({
-              contents: [{ parts: [{ text: `CV: ${originalCV}\n\nİlan: ${jobDescription}` }] }],
-              systemInstruction: { parts: [{ text: systemPrompt }] },
-          });
-          
-          let rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || "Merhaba, hazırsanız başlayalım. Kendinizden kısaca bahseder misiniz?";
-          setInterviewMessages([{ sender: 'ai', text: cleanAIResponse(rawText) }]);
+          const turn = await interviewTurn({ ...interviewBase(type), history: [] });
+          setInterviewMax(turn.maxQuestions);
+          setQuestionCount(turn.questionNumber);
+          setInterviewMessages([{ sender: 'ai', text: turn.message }]);
+          if (turn.done) {
+              setInterviewEndReason(turn.reason);
+              setIsInterviewFinished(true);
+          }
       } catch (err) {
-          setInterviewMessages([{ sender: 'ai', text: "Bağlantı hatası oluştu. Lütfen tekrar deneyin." }]);
+          setInterviewMessages([{ sender: 'ai', text: err.message || "Bağlantı hatası oluştu. Lütfen tekrar deneyin." }]);
           setInterviewType(null); 
       } finally {
           setInterviewLoading(false);
@@ -1009,62 +930,25 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
   };
 
   const handleSendInterviewMessage = async () => {
-    if (!userInterviewInput.trim()) return;
-    
-    const userMsg = { sender: 'user', text: userInterviewInput };
-    setInterviewMessages(prev => [...prev, userMsg]);
+    if (!userInterviewInput.trim() || interviewLoading) return;
+    const userMsg = { sender: 'user', text: userInterviewInput.trim() };
+    const nextMessages = [...interviewMessages, userMsg];
+    setInterviewMessages(nextMessages);
     setUserInterviewInput('');
     setInterviewLoading(true);
-
-    const currentCount = questionCount + 1;
-    setQuestionCount(currentCount);
-    const isEnding = currentCount >= 10;
-
-    const historyText = interviewMessages.map(m => `${m.sender === 'ai' ? 'Interviewer' : 'Candidate'}: ${m.text}`).join('\n');
-    
-    const basePrompt = interviewType === 'hr'
-        ? `Sen profesyonel bir İnsan Kaynakları (İK) uzmanısın.`
-        : `Sen deneyimli bir Takım Liderisin (Team Lead).`;
-
-    const systemPrompt = `${basePrompt}
-    Adayla mülakat yapıyorsun.
-    ÖNCEKİ KONUŞMA GEÇMİŞİ:
-    ${historyText}
-    
-    ADAYIN SON CEVABI:
-    "${userInterviewInput}"
-    
-    GÖREV VE KURALLAR:
-    1. KESİNLİKLE JSON FORMATI KULLANMA. Süslü parantez {}, "evaluation" veya herhangi bir kod yapısı ASLA KULLANMA. Doğrudan insan diliyle sohbet et.
-    2. TROLL VE ARGO KONTROLÜ: Eğer adayın son cevabı mülakatla tamamen alakasız, saygısız, dalga geçer gibi (örn: "cırt", "sana ne", "asd", anlamsız harfler) veya küfür/argo içeriyorsa: Mülakatı profesyonelliğini bozmadan ama ÇOK SERT ve CİDDİ bir dille anında sonlandır. Ona bu tavrının kabul edilemez olduğunu söyle ve mesajının en sonuna tam olarak KESİNLİKLE [TERMINATE] etiketini koy. (Bunu yaparsan 3. ve 4. maddeleri yoksay).
-    3. Eğer cevap normal ise; adayın cevabını kısaca ve doğal bir şekilde değerlendir, ardından YENİ bir soru sor. Tek seferde SADECE BİR soru sor.
-    ${isEnding 
-        ? `4. DİKKAT: Bu 10. ve son aşama! Artık yeni soru SORMA. Mülakatı profesyonelce sonlandır, adaya katılımı için teşekkür et.` 
-        : `4. Şu an ${currentCount}. aşamadasın. Akışa uygun şekilde normal mülakata devam et.`}`;
-
     try {
-        const result = await callGeminiApi({
-            contents: [{ parts: [{ text: "Analiz et ve sadece insan diliyle cevap ver." }] }], 
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-        });
-        
-        let rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || "Üzgünüm, anlayamadım.";
-        let cleanText = cleanAIResponse(rawText);
-        
-        let isTerminatedByAI = false;
-        if (cleanText.includes('[TERMINATE]')) {
-            isTerminatedByAI = true;
-            cleanText = cleanText.replace(/\[TERMINATE\]/g, '').trim();
-        }
-
-        setInterviewMessages(prev => [...prev, { sender: 'ai', text: cleanText }]);
-        
-        if (isEnding || isTerminatedByAI) {
-            setIsInterviewFinished(true); 
+        const turn = await interviewTurn({ ...interviewBase(interviewType), history: toHistory(nextMessages) });
+        setInterviewMessages(prev => [...prev, { sender: 'ai', text: turn.message }]);
+        setQuestionCount(turn.questionNumber);
+        if (turn.done) {
+            setInterviewEndReason(turn.reason);
+            setIsInterviewFinished(true);
         }
     } catch (err) {
-        setInterviewMessages(prev => [...prev, { sender: 'ai', text: "Üzgünüm, bir bağlantı hatası oluştu." }]);
-        setQuestionCount(prev => prev - 1); 
+        // Roll back the unanswered message so the user can resend it.
+        setInterviewMessages(prev => prev.slice(0, -1));
+        setUserInterviewInput(userMsg.text);
+        setError(err.message || "Üzgünüm, bir bağlantı hatası oluştu.");
     } finally {
         setInterviewLoading(false);
     }
@@ -1079,105 +963,16 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
 
   const generateInterviewReport = async () => {
     setIsGeneratingReport(true);
-    
-    const historyText = interviewMessages.map(m => `${m.sender === 'ai' ? 'Interviewer' : 'Candidate'}: ${m.text}`).join('\n');
-    
-    const systemPrompt = `Sen uzman bir Mülakat Değerlendiricisisin. Aşağıda adayın girdiği mülakatın tam dökümü var.
-    Bu mülakatı detaylıca analiz et ve sadece JSON formatında bir rapor döndür.
-
-    KURALLAR:
-    1. Eğer mülakat AI tarafından (troll, argo veya ciddiyetsizlik sebebiyle) erken sonlandırıldıysa, "score" değerini 0 ile 20 arasında çok düşük bir puan ver ve zayıf yönler kısmında bu profesyonel olmayan tavrı sertçe eleştir.
-    2. Eğer mülakat normal bittiyse, adayın cevaplarının tatmin ediciliğine göre 100 üzerinden gerçekçi bir puan ("score") ver.
-    3. Çıktı sadece geçerli bir JSON objesi olmalıdır. Markdown veya ekstra metin KULLANMA.
-
-    BEKLENEN JSON FORMATI:
-    {
-      "score": 85,
-      "strengths": ["Güçlü yön 1", "Güçlü yön 2"],
-      "weaknesses": ["Eksik/Zayıf yön 1", "Eksik yön 2"],
-      "suggestions": ["Şöyle cevap versen daha iyi olurdu 1", "Şu konuya daha çok değinmeliydin"]
-    }`;
-
     try {
-        const result = await callGeminiApi({
-            contents: [{ parts: [{ text: historyText }] }],
-            systemInstruction: { parts: [{ text: systemPrompt }] },
-            generationConfig: { responseMimeType: "application/json" }
+        const report = await fetchInterviewReport({
+            ...interviewBase(interviewType || 'hr'),
+            history: toHistory(interviewMessages),
+            endReason: interviewEndReason,
         });
-        
-        const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-        let parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-        
-        parsed = sanitizeData({
-            ...optimizedData, 
-            ...parsed 
-        });
-
-        // YENİ EKLENEN: Yeni oluşan bölümün ID'sini aklımızda tutuyoruz
-        let newlyCreatedCustomId = null; 
-
-        setOptimizedData(prev => {
-          const newData = { ...prev };
-          const uniqueId = Math.random().toString(36).substr(2, 9);
-          
-          if (addItemSection === 'summary') {
-              if (parsed.summary_v1) newData.summary_v1 = parsed.summary_v1;
-              if (parsed.summary_v3) newData.summary_v3 = parsed.summary_v3;
-          } 
-          else if (addItemSection === 'experience' && parsed.entry) {
-              newData.experience = [{...parsed.entry, id: uniqueId}, ...(newData.experience || [])];
-          } 
-          else if (addItemSection === 'education' && parsed.entry) {
-              newData.education = [{...parsed.entry, id: uniqueId}, ...(newData.education || [])];
-          } 
-          else if ((addItemSection === 'skills' || addItemSection === 'additional') && parsed.items) {
-              newData[addItemSection] = [...(newData[addItemSection] || []), ...parsed.items];
-          }
-          else if (addItemSection === 'contactLink' && parsed.link) { 
-              newData.customLinks = [...(newData.customLinks || []), { ...parsed.link, id: uniqueId }];
-          }
-          else if (addItemSection === 'custom') {
-              const customId = `custom_${uniqueId}`;
-              newlyCreatedCustomId = customId; // ID'yi hafızaya aldık
-              
-              if (parsed.type === 'detailed' && parsed.entries) {
-                   newData[customId] = parsed.entries.map(e => ({...e, id: Math.random().toString(36).substr(2, 9)}));
-              } else if (parsed.items) {
-                   newData[customId] = parsed.items;
-              }
-              
-              setCustomHeadings(h => ({ ...h, [customId]: addItemTitle.toUpperCase() })); 
-              setSectionsOrder(o => [...o, customId]); 
-          }
-          // Veriyi mevcut bölüme ilave et (Burası kodunda zaten vardı, koruyoruz)
-          else if (addItemSection.startsWith('custom_')) {
-              const existingData = newData[addItemSection];
-              let isDetailed = true;
-              if (existingData && existingData.length > 0) {
-                  isDetailed = typeof existingData[0] === 'object';
-              }
-              
-              if (isDetailed && parsed.entry) {
-                  newData[addItemSection] = [{...parsed.entry, id: uniqueId}, ...(newData[addItemSection] || [])];
-              } else if (!isDetailed && parsed.items) {
-                  newData[addItemSection] = [...(newData[addItemSection] || []), ...parsed.items];
-              }
-          }
-
-          return newData;
-        });
-        
-        setAddItemInput('');
-        setAddItemTitle(''); 
-        
-        // EFSANE DOKUNUŞ BURADA: Eğer sıfırdan bir bölüm yarattıysak, menüyü otomatik olarak o bölüme kaydır!
-        if (newlyCreatedCustomId) {
-            setAddItemSection(newlyCreatedCustomId);
-        }
-      }
+        setInterviewReport(report);
     } catch (err) {
         console.error("Rapor oluşturulamadı:", err);
+        setError(err.message || "Mülakat raporu oluşturulamadı.");
     } finally {
         setIsGeneratingReport(false);
     }
@@ -1185,127 +980,79 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
 
 // --- YENİ EKLENEN: AKILLI & TOPLU CV'YE YEDİRME FONKSİYONU ---
   // --- YENİ EKLENEN: AKILLI & TOPLU CV'YE YEDİRME FONKSİYONU ---
- const handleIntegrateBatchGaps = async () => {
-    if (selectedGaps.length === 0) return;
+  // Honest gap integration: the user must confirm they really have the selected
+  // qualifications; experience bullets are only written from the user's own notes.
+  const handleIntegrateBatchGaps = async () => {
+    if (selectedGaps.length === 0 || !gapConfirmed) return;
     setIsIntegratingGaps(true);
+    setGapNotice(null);
     ReactGA.event({ category: "Aksiyon", action: "Toplu_Eksik_Giderme_AI", label: `${selectedGaps.length}_madde` });
 
-    const langText = cvLanguage === 'tr' ? 'TÜRKÇE' : 'İNGİLİZCE';
-    const systemInstruction = `Sen profesyonel ve üst düzey bir CV yazarısın. Adayın CV'sinde ilan gereksinimlerine göre şu eksikler tespit edildi:
-    EKSİKLER LİSTESİ: ${JSON.stringify(selectedGaps)}
-    
-    Amacın bu eksik maddelerin HER BİRİNİ mantıksal olarak analiz edip profesyonel bir dille adayın CV'sine "yedirmek".
-    
-    KURALLAR:
-    1. Listede yer alan her bir madde için düşün: Bu bir YETENEK (Araç, yazılım, dil - Örn: SAP FI, B2B Satış) mi, yoksa DENEYİM (Görev, sorumluluk, yıl şartı - Örn: 5 yıl tecrübe, Bütçe oluşturma) mi?
-    2. Eğer YETENEK ise: "targetSection" olarak "skills" seç ve "skill_content" alanına maksimum 3 kelimelik, temiz bir teknoloji/yetenek adı yaz. (Örn: "5 yıllık SAP FI deneyimi" -> "SAP FI").
-    3. Eğer DENEYİM ise: "targetSection" olarak "experience" seç. "eksikliği" veya "uyumsuzluk" gibi kelimeleri ASLA kullanma. Aday sanki bunu gerçekten başarmış gibi güçlü, olumlu ve kurumsal bir iş tecrübesi cümlesi kur (Örn: "Milyonluk bütçe süreçlerini başarıyla yürüterek 5 yıllık kapsamlı bir finans yönetimi deneyimi elde ettim.").
-    4. Sadece geçerli bir JSON Dizisi (Array) döndür.
-    
-    ÇIKTI FORMATI:
-    [
-      {
-         "original_gap": "Listenin içindeki orijinal eksik metnini BİREBİR AYNI YAZ (Boşlukları bile atlama)",
-         "targetSection": "skills" veya "experience",
-         "skill_content": "Sadece targetSection skills ise doldur",
-         "exp_content_v1": "Sadece targetSection experience ise doldur. 1. Tekil (Ben) diliyle",
-         "exp_content_v3": "Sadece targetSection experience ise doldur. 3. Tekil (O/Edilgen) diliyle"
-      }
-    ]`;
-
     try {
-        const result = await callGeminiApi({
-            contents: [{ parts: [{ text: "Yukarıdaki eksikleri analiz et ve istenen JSON dizisi formatında sonuç üret." }] }],
-            systemInstruction: { parts: [{ text: systemInstruction }] },
-            generationConfig: { responseMimeType: "application/json" }
+        const { items, skipped } = await integrateGapsApi({ gaps: selectedGaps, notes: gapNotes, lang: cvLanguage, confirmed: true });
+
+        setOptimizedData(prev => {
+            const newData = JSON.parse(JSON.stringify(prev));
+            if (!newData.analysis.gap_mapping) newData.analysis.gap_mapping = {};
+            if (!newData.analysis.additions) newData.analysis.additions = [];
+
+            items.forEach(item => {
+                if (item.targetSection === 'skills') {
+                    if (!newData.skills) newData.skills = [];
+                    if (!newData.skills.includes(item.skill_content)) newData.skills.push(item.skill_content);
+                    newData.analysis.gap_mapping[item.skill_content] = item.original_gap;
+                    newData.analysis.additions.push(item.skill_content);
+                } else if (item.targetSection === 'experience') {
+                    if (newData.experience && newData.experience.length > 0) {
+                        const exp = newData.experience[0];
+                        exp.bullets_v1 = [...(exp.bullets_v1 || []), item.exp_content_v1];
+                        exp.bullets_v3 = [...(exp.bullets_v3 || []), item.exp_content_v3];
+                        exp.bullets = [...(exp.bullets || []), item.exp_content_v1];
+                    } else {
+                        newData.summary_v1 = `${newData.summary_v1 || ''} ${item.exp_content_v1}`.trim();
+                        newData.summary_v3 = `${newData.summary_v3 || ''} ${item.exp_content_v3}`.trim();
+                    }
+                    newData.analysis.gap_mapping[item.exp_content_v1] = item.original_gap;
+                    newData.analysis.gap_mapping[item.exp_content_v3] = item.original_gap;
+                    newData.analysis.additions.push(item.exp_content_v1);
+                }
+                newData.analysis = claimRequirement(newData.analysis, item.original_gap);
+            });
+            return newData;
         });
 
-        const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (text) {
-            let parsedArray = JSON.parse(text.replace(/```json|```/g, '').trim());
-            if (!Array.isArray(parsedArray)) { parsedArray = [parsedArray]; } 
-            
-            setOptimizedData(prev => {
-                const newData = JSON.parse(JSON.stringify(prev));
-                
-                let skillsBoost = 0;
-                let expBoost = 0;
-                
-                const processedOriginalGaps = new Set();
-
-                // YENİ EKLENEN KISIM: Hafıza nesnesini oluştur
-                if (!newData.analysis.gap_mapping) newData.analysis.gap_mapping = {};
-
-                parsedArray.forEach(parsed => {
-                    const originalGap = parsed.original_gap;
-                    const uniqueKey = parsed.skill_content || parsed.exp_content_v1;
-
-                    if (!originalGap || !uniqueKey || processedOriginalGaps.has(originalGap)) return;
-                    processedOriginalGaps.add(originalGap);
-
-                    // 1. Ekleme İşlemi
-                    if (parsed.targetSection === 'skills' && parsed.skill_content) {
-                        if (!newData.skills) newData.skills = [];
-                        if (!newData.skills.includes(parsed.skill_content)) {
-                            newData.skills.push(parsed.skill_content);
-                        }
-                        // HAFIZAYA YAZ: Bu yetenek, bu eksik cümlesinden geldi
-                        newData.analysis.gap_mapping[parsed.skill_content] = originalGap;
-                        skillsBoost += 4;
-                    } else if (parsed.targetSection === 'experience' && parsed.exp_content_v1) {
-                        if (newData.experience && newData.experience.length > 0) {
-                            if(!newData.experience[0].bullets_v1) newData.experience[0].bullets_v1 = [];
-                            if(!newData.experience[0].bullets_v3) newData.experience[0].bullets_v3 = [];
-                            if(!newData.experience[0].bullets) newData.experience[0].bullets = [];
-
-                            newData.experience[0].bullets_v1.push(parsed.exp_content_v1);
-                            newData.experience[0].bullets_v3.push(parsed.exp_content_v3 || parsed.exp_content_v1);
-                            newData.experience[0].bullets.push(parsed.exp_content_v1);
-                        } else {
-                            newData.summary_v1 = (newData.summary_v1 || "") + " " + parsed.exp_content_v1;
-                            newData.summary_v3 = (newData.summary_v3 || "") + " " + (parsed.exp_content_v3 || parsed.exp_content_v1);
-                        }
-                        
-                        // HAFIZAYA YAZ: Bu deneyim cümlesi, bu eksik cümlesinden geldi (Hem v1 hem v3 dilleri için)
-                        newData.analysis.gap_mapping[parsed.exp_content_v1] = originalGap;
-                        if (parsed.exp_content_v3) newData.analysis.gap_mapping[parsed.exp_content_v3] = originalGap;
-                        
-                        expBoost += 5;
-                    }
-                    
-                    // 2. Eksiklerden Sil ve Eklenenlere Taşı
-                    if (newData.analysis && newData.analysis.gaps) {
-                        newData.analysis.gaps = newData.analysis.gaps.filter(g => g.trim().toLowerCase() !== originalGap.trim().toLowerCase());
-                    }
-                    if (newData.analysis && !newData.analysis.additions) newData.analysis.additions = [];
-                    if (newData.analysis && !newData.analysis.additions.includes(uniqueKey)) {
-                        newData.analysis.additions.push(uniqueKey);
-                    }
-                });
-                
-                // 3. MATEMATİKSEL ATS PUANI HESAPLAMA
-                if(newData.analysis && newData.analysis.scores) {
-                    newData.analysis.scores.skills = Math.min(100, (newData.analysis.scores.skills || 70) + skillsBoost);
-                    newData.analysis.scores.experience = Math.min(100, (newData.analysis.scores.experience || 70) + expBoost);
-                    
-                    newData.analysis.scores.overall = Math.round(
-                        ((newData.analysis.scores.skills || 0) + 
-                         (newData.analysis.scores.experience || 0) + 
-                         (newData.analysis.scores.education || 70)) / 3
-                    );
-                }
-
-                return newData;
-            });
-            
-            setSelectedGaps([]); 
+        if (skipped.length) {
+            setGapNotice(cvLanguage === 'en'
+                ? `${skipped.length} experience item(s) were not added because your notes did not describe them. Add a short note about what you actually did and try again.`
+                : `${skipped.length} deneyim maddesi, notlarınızda açıklanmadığı için eklenmedi. Gerçekte ne yaptığınızı kısaca yazıp tekrar deneyin.`);
         }
+        setSelectedGaps(skipped);
+        setGapConfirmOpen(skipped.length > 0);
+        setGapConfirmed(false);
     } catch (err) {
         console.error("Akıllı yedirme hatası:", err);
-        setError("Eksikler giderilirken bir hata oluştu.");
+        setError(err.message || "Eksikler giderilirken bir hata oluştu.");
     } finally {
         setIsIntegratingGaps(false);
     }
+  };
+
+  // Restore a flagged rewritten bullet to the user's original CV sentence.
+  const handleRevertClaim = (claim) => {
+    setOptimizedData(prev => {
+        const newData = JSON.parse(JSON.stringify(prev));
+        for (const exp of newData.experience || []) {
+            const idx = (exp.bullets_v1 || []).indexOf(claim.text);
+            if (idx >= 0) {
+                exp.bullets_v1[idx] = claim.source;
+                if (exp.bullets_v3) exp.bullets_v3[idx] = claim.source;
+                if (exp.bullets) exp.bullets[idx] = claim.source;
+                break;
+            }
+        }
+        return newData;
+    });
+    setRevertedClaims(prev => [...prev, claim.id]);
   };
 
   const handleOptimize = async (lang) => {
@@ -1334,124 +1081,46 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
       label: lang === 'tr' ? 'Turkce' : 'Ingilizce'
     });
 
+    stageCeilingRef.current = 4;
+    setRevertedClaims([]);
+    setGapNotice(null);
+    setGapConfirmOpen(false);
+
+    // Progress creeps toward the ceiling of the stage the server is currently running.
     const progressInterval = setInterval(() => {
         setLoadingProgress(prev => {
-            if (prev >= 95) return prev; 
-
-            let increment = 0;
-            if (prev < 30) increment = Math.random() * 3 + 1; 
-            else if (prev < 70) increment = Math.random() * 1.5 + 0.5;
-            else increment = Math.random() * 0.3 + 0.05; 
-
-            const nextVal = prev + increment;
-            
-            if (nextVal > 15 && nextVal < 45) setLoadingText(lang === 'tr' ? "🧠 AI İçeriği Optimize Ediyor..." : "🧠 AI Optimizing Content...");
-            if (nextVal > 45 && nextVal < 75) setLoadingText(lang === 'tr' ? "🎯 ATS Uyumluluğu Kontrol Ediliyor..." : "🎯 Checking ATS Compatibility...");
-            if (nextVal > 75) setLoadingText(lang === 'tr' ? "✨ Tasarım Oluşturuluyor..." : "✨ Generating Design...");
-            
-            return nextVal;
+            const ceiling = stageCeilingRef.current;
+            if (prev >= ceiling) return prev;
+            return Math.min(ceiling, prev + Math.max(0.15, (ceiling - prev) * 0.04));
         });
-    }, 100);
+    }, 120);
 
-    const langText = lang === 'tr' ? 'TÜRKÇE' : 'İNGİLİZCE';
-    
-    // YENİ GÜNCELLENMİŞ YAPAY ZEKA TALİMATI (PROMPT) - KATI YETENEK KISITLAMASI
-    const systemPrompt = `Sen profesyonel bir İK ve ATS uzmanısın. Kullanıcının CV'sini iş ilanına göre uyarla.
-    
-    🛑 ADIM 1: CV DOĞRULAMA KONTROLÜ (GÜVENLİK BARİYERİ)
-    Öncelikle kullanıcının yüklediği 'CV' metnini incele. Bu metnin gerçekten bir özgeçmiş (CV) olma ihtimalini %0 ile %100 arasında hesapla.
-    Eğer bu oran %40'ın altındaysa (fatura, hikaye, rastgele harfler vb.), SADECE aşağıdaki JSON'ı döndür ve İŞLEMİ DURDUR:
-    {"is_valid_cv": false, "error_message": "🚨 Güvenlik Uyarısı: Yüklediğiniz doküman bir özgeçmişe (CV) benzemiyor. Lütfen geçerli bir CV yüklediğinizden emin olun."}
-
-    ✅ ADIM 2: EĞER DOKÜMAN BİR CV İSE (%40 ve üzeri eşleşme varsa), AŞAĞIDAKİ İŞLEME GEÇ:
-    
-    ÇIKTI FORMATI: Mutlaka KUSURSUZ VE GEÇERLİ bir JSON objesi döndür. 
-    DİKKAT: JSON içinde asla yorum satırı (//) kullanma! Tüm JSON anahtarları çift tırnak ("") içinde olmalıdır.
-    
-    JSON Şeması:
-    {
-      "name": "Kişinin Adı",
-      "title": "Hedeflenen Pozisyon Ünvanı",
-      "location": "Şehir, Ülke",
-      "phone": "Telefon Numarası",
-      "email": "E-posta Adresi",
-      "linkedin": "linkedin.com/in/kullaniciadi",
-      "summary_v1": "1. Tekil Şahıs (Ben) ağzından yazılmış profesyonel özet",
-      "summary_v3": "3. Tekil Şahıs (O) veya Nesnel ağızdan yazılmış profesyonel özet",
-      "experience": [{
-          "role": "Pozisyon", 
-          "company": "Şirket", 
-          "date": "Tarih", 
-          "bullets_v1": ["1. Tekil (Ben) diliyle madde 1"],
-          "bullets_v3": ["3. Tekil (O) diliyle madde 1"]
-      }],
-      "education": [{"degree": "Bölüm Adı", "school": "Okul veya Kurum", "date": "", "details": ""}],
-      "skills": ["SQL", "React", "Çevik Yönetim"], 
-      "additional": ["İngilizce (C1)", "Yüzme"],
-      "analysis": {
-        "scores": {
-          "overall": 75,
-          "skills": 80,
-          "experience": 70,
-          "education": 75
-        },
-        "matches": {
-          "hard_skills": ["SQL", "React"],
-          "soft_skills": ["Takım Çalışması"]
-        },
-        "gaps": ["Eksik yetenek 1"],
-        "additions": ["Eklenen kelime 1"]
-      }
-    }
-      
-    KURALLAR:
-    1. Görseldeki hiyerarşik yapıya sadık kal.
-    2. LinkedIn adresini CV içinden bul ve "linkedin" alanına ekle.
-    3. Tüm CV içeriğini profesyonel ${langText} olarak oluştur. 
-    4. İngilizce ise tarihleri (e.g., "Present", "Jan 2024") İngilizce, Türkçe ise (e.g., "Devam Ediyor", "Ocak 2024") Türkçe yap.
-    5. Orijinal verileri asla değiştirme, sadece ${langText} diline en uygun ve profesyonel şekilde uyarla.
-    6. SKORLAMA (OBJEKTİF VE GERÇEKÇİ OL): Puanları (0-100) belirlerken sektör standartlarında adil bir ATS sistemi gibi davran. DİKKAT: "overall" skoru, diğer üç skorun tam olarak matematiksel ortalaması olmak ZORUNDADIR.
-    7. KRİTİK KURAL: Eğer bir deneyim veya eğitim maddesinin tarihi orijinal metinde yoksa, tarih alanına uydurma bir tarih yazma. Boş bırak (JSON'da boş string "" olarak gönder).
-    8. GİZLİLİK VE GENELLİK (ÇOK ÖNEMLİ): Kişisel Özet (Summary) kısmında ASLA iş ilanını yayınlayan şirketin ismini geçirme. 
-    9. FORMATLAMA (KESİN KURAL): Metinlerin içinde asla markdown kalınlaştırma (** **) işaretleri kullanma. Kelimeleri yalın bırak. 
-    10. EĞİTİM VE SERTİFİKALAR: Tüm Sertifikaları, Kursları, Bootcamp'leri ve Eğitim programlarını KESİNLİKLE "education" dizisinin içine ekle. Bunları "additional" veya "skills" kısmına koyma.
-    11. SKILLS (YETENEKLER) KISITLAMASI - ÇOK ÖNEMLİ: 'skills' dizisine EN FAZLA 12 adet yetenek ekle. Her bir yetenek KESİNLİKLE MAKSİMUM 3 KELİME olmalıdır! Asla "lisans derecesi", "finansal kurumlarda çalışma deneyimi" gibi uzun cümleler yazma. Sadece kısa, vurucu yetenek ve teknoloji isimleri yaz (Örn: Python, Proje Yönetimi, SQL, Çevik Çalışma).`;
+    const onStage = (evt) => {
+        const p = STAGE_PROGRESS[evt.name];
+        if (!p) return;
+        if (evt.status === 'start') {
+            stageCeilingRef.current = p.done - 1;
+            setLoadingText(STAGE_TEXT[lang]?.[evt.name] || STAGE_TEXT.tr[evt.name]);
+        } else {
+            stageCeilingRef.current = p.done;
+            setLoadingProgress(prev => Math.max(prev, p.done));
+        }
+    };
 
     try {
-      const payload = {
-        contents: [{ parts: [{ text: `CV: ${originalCV}\n\nİlan: ${jobDescription}` }] }],
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        generationConfig: { responseMimeType: "application/json" }
-      };
+      const result = await tailorCv({ cv: originalCV, jobPosting: jobDescription, lang }, { onStage });
 
-      const result = await callGeminiApi(payload);
-      
       clearInterval(progressInterval);
       setLoadingProgress(100);
       setLoadingText(lang === 'tr' ? "✅ Hazır!" : "✅ Ready!");
       setShowConfetti(true);
-      
+
       await new Promise(resolve => setTimeout(resolve, 600));
 
-      const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (text) {
-        const cleanText = text.replace(/```json|```/g, '').trim();
-        let parsedData = JSON.parse(cleanText);
-        
-        if (parsedData.is_valid_cv === false) {
-            setError(parsedData.error_message);
-            setIsLoading(false);
-            setLoadingProgress(0);
-            return; 
-        }
-
-        parsedData = sanitizeData(parsedData);
-
-        if (parsedData.experience) parsedData.experience = parsedData.experience.map(i => ({...i, id: Math.random().toString(36).substr(2, 9)}));
-        if (parsedData.education) parsedData.education = parsedData.education.map(i => ({...i, id: Math.random().toString(36).substr(2, 9)}));
-        
-        setOptimizedData(parsedData);
-      }
+      let parsedData = sanitizeData(result);
+      if (parsedData.experience) parsedData.experience = parsedData.experience.map(i => ({...i, id: Math.random().toString(36).substr(2, 9)}));
+      if (parsedData.education) parsedData.education = parsedData.education.map(i => ({...i, id: Math.random().toString(36).substr(2, 9)}));
+      setOptimizedData(parsedData);
     } catch (err) {
       setError(err.message || 'Optimizasyon sırasında bir hata oluştu. Lütfen tekrar deneyin.');
       console.error(err);
@@ -1465,64 +1134,26 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
     if (!addItemInput.trim()) return;
     setIsAddingItem(true);
     
-    const langText = cvLanguage === 'tr' ? 'TÜRKÇE' : 'İNGİLİZCE';
-    let systemInstruction = "";
-    let userPrompt = `Girdi: ${addItemInput}`;
-
+    // Map the UI section to an API task; prompts live on the server.
+    let apiSection = addItemSection;
+    let input = addItemInput;
     if (addItemSection === 'summary') {
         const currentSummary = narrativeVoice === 'first' ? optimizedData.summary_v1 : optimizedData.summary_v3;
-        userPrompt = `Mevcut Özet: "${currentSummary}"\n\nEklenecek Bilgi: "${addItemInput}"\n\nGörev: Eklenecek bilgiyi mevcut özete profesyonelce yedir, akışı bozma ve bütünlüklü tek bir paragraf olarak yeniden yaz.`;
-        systemInstruction = `Sen profesyonel bir CV yazarısın. Çıktı formatı JSON: {"summary_v1": "Ben diliyle yazılmış yeni özet", "summary_v3": "O diliyle yazılmış yeni özet"}. Markdown kullanma. Sadece JSON döndür. Dili: ${langText}.`;
-    }
-    else if (addItemSection === 'education') {
-        systemInstruction = `Sen profesyonel bir CV yazarısın. Kullanıcı girdisinden bir Eğitim maddesi oluştur. Çıktı formatı JSON: {"entry": {"degree": "Bölüm/Sertifika Adı", "school": "Okul/Kurum", "date": "Tarih", "details": "Kısa açıklama"}}. Markdown kullanma. Dili: ${langText}. Sadece JSON döndür.`;
-    }
-    else if (addItemSection === 'experience') {
-        systemInstruction = `Sen profesyonel bir CV yazarısın. Kullanıcı girdisinden bir İş Deneyimi maddesi oluştur. Çıktı formatı JSON: {"entry": {"role": "Pozisyon", "company": "Şirket", "date": "Tarih", "bullets_v1": ["Ben diliyle madde"], "bullets_v3": ["O diliyle madde"]}}. Markdown kullanma. Dili: ${langText}. Sadece JSON döndür.`;
-    }
-    else if (addItemSection === 'contactLink') { 
-        userPrompt = `Bağlantı Türü/Adı: ${addItemTitle}\nURL veya Kullanıcı Adı: ${addItemInput}`;
-        systemInstruction = `Sen profesyonel bir CV yazarısın. Girdi olarak verilen linki analiz et. Çıktı formatı JSON: {"link": {"label": "Bağlantı Adı (Örn: GitHub, Portfolio, Behance vb.)", "url": "Temizlenmiş URL (Örn: github.com/username)"}}. Markdown kullanma. Dili: ${langText}. Sadece JSON döndür.`;
-    }
-    else if (addItemSection === 'custom') {
-        userPrompt = `Bölüm Başlığı: ${addItemTitle}\nİçerik: ${addItemInput}`;
-        systemInstruction = `Sen profesyonel bir CV yazarısın. Kullanıcının girdiği içeriği analiz et ve iki formattan birini seç:
-        1. DETAYLI FORMAT (Projeler, Gönüllü Çalışmalar gibi tarih ve detay gerektirenler):
-            JSON Çıktısı: {"type": "detailed", "entries": [{"role": "Proje Adı", "company": "Teknolojiler/Kurum", "date": "Tarih", "bullets": ["Detay 1"]}]}
-        2. BASİT FORMAT (Sertifikalar, Diller, Hobiler gibi liste olanlar):
-            JSON Çıktısı: {"type": "simple", "items": ["Madde 1", "Madde 2"]}
-        Markdown kullanma. Sadece JSON döndür. Dili: ${langText}.`;
-    }
-    else if (addItemSection.startsWith('custom_')) {
+        input = `Mevcut özet: ${currentSummary}\n\nEklenecek bilgi: ${addItemInput}\n\nEklenecek bilgiyi mevcut özete akışı bozmadan yedirerek tek paragraf halinde yeniden yaz.`;
+    } else if (addItemSection === 'contactLink') {
+        input = `${addItemTitle}: ${addItemInput}`;
+    } else if (addItemSection === 'custom') {
+        apiSection = 'customNew';
+    } else if (addItemSection.startsWith('custom_')) {
         const existingData = optimizedData[addItemSection];
-        let isDetailed = true; 
-        if (existingData && existingData.length > 0) {
-            isDetailed = typeof existingData[0] === 'object';
-        }
-        
-        userPrompt = `Mevcut Bölüm: ${customHeadings[addItemSection] || 'Özel'}\nEklenecek İçerik: ${addItemInput}`;
-        
-        if (isDetailed) {
-            systemInstruction = `Sen profesyonel bir CV yazarısın. Kullanıcının girdisinden bu özel bölüm için DETAYLI formatta bir madde oluştur. Çıktı JSON: {"entry": {"role": "Proje/Başlık", "company": "Alt Başlık/Kurum vb", "date": "Tarih", "bullets": ["Açıklama 1"]}}. Markdown kullanma. Sadece JSON döndür. Dili: ${langText}.`;
-        } else {
-             systemInstruction = `Sen profesyonel bir CV yazarısın. Kullanıcının girdisinden bu özel bölüm için BASİT formatta bir madde oluştur. Çıktı JSON: {"items": ["Madde 1"]}. Markdown kullanma. Sadece JSON döndür. Dili: ${langText}.`;
-        }
-    }
-    else {
-        systemInstruction = `Sen profesyonel bir CV yazarısın. Kullanıcının girdisini ${addItemSection === 'skills' ? 'Teknik Yetenek' : 'Ek Bilgi'} formatına çevir. Tek bir madde veya liste olabilir. Çıktı formatı JSON: {"items": ["Madde 1"]}. Markdown kullanma. Dili: ${langText}. Sadece JSON döndür.`;
+        const isDetailed = !(existingData && existingData.length > 0 && typeof existingData[0] !== 'object');
+        apiSection = isDetailed ? 'customDetailed' : 'customSimple';
+        input = `${customHeadings[addItemSection] || ''}: ${addItemInput}`;
     }
 
     try {
-      const result = await callGeminiApi({
-        contents: [{ parts: [{ text: userPrompt }] }],
-        systemInstruction: { parts: [{ text: systemInstruction }] },
-        generationConfig: { responseMimeType: "application/json" }
-      });
-
-      const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (text) {
-        let parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-        
+      let parsed = await addItemApi({ section: apiSection, input, title: addItemSection === 'custom' ? addItemTitle : undefined, lang: cvLanguage });
+      {
         parsed = sanitizeData({
             ...optimizedData, 
             ...parsed 
@@ -2313,25 +1944,37 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
                       <div className="bg-white p-5 rounded-2xl border border-slate-200 mb-6 flex flex-col sm:flex-row items-center gap-6 shadow-sm">
                          <div className="flex flex-col items-center justify-center shrink-0">
                             <div className="w-24 h-24 rounded-full border-4 border-black flex items-center justify-center bg-white shadow-inner relative">
-                                <span className="text-3xl font-black text-black">%{optimizedData.analysis.scores?.overall || 0}</span>
+                                <span className="text-3xl font-black text-black">{fmtScore(optimizedData.analysis.scores?.overall)}</span>
                             </div>
                             <span className="text-[10px] font-bold text-slate-500 mt-3 uppercase tracking-widest">{translations[cvLanguage].scoreOverall}</span>
                          </div>
                          
                          <div className="flex-1 w-full space-y-4">
                             <div>
-                               <div className="flex justify-between text-xs font-bold text-slate-700 mb-1.5"><span>{translations[cvLanguage].scoreSkills}</span><span>%{optimizedData.analysis.scores?.skills || 0}</span></div>
+                               <div className="flex justify-between text-xs font-bold text-slate-700 mb-1.5"><span>{translations[cvLanguage].scoreSkills}</span><span>{fmtScore(optimizedData.analysis.scores?.skills)}</span></div>
                                <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-blue-500 rounded-full transition-all duration-1000" style={{width: `${optimizedData.analysis.scores?.skills || 0}%`}}></div></div>
                             </div>
                             <div>
-                               <div className="flex justify-between text-xs font-bold text-slate-700 mb-1.5"><span>{translations[cvLanguage].scoreExperience}</span><span>%{optimizedData.analysis.scores?.experience || 0}</span></div>
+                               <div className="flex justify-between text-xs font-bold text-slate-700 mb-1.5"><span>{translations[cvLanguage].scoreExperience}</span><span>{fmtScore(optimizedData.analysis.scores?.experience)}</span></div>
                                <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-emerald-500 rounded-full transition-all duration-1000" style={{width: `${optimizedData.analysis.scores?.experience || 0}%`}}></div></div>
                             </div>
                             <div>
-                               <div className="flex justify-between text-xs font-bold text-slate-700 mb-1.5"><span>{translations[cvLanguage].scoreEducation}</span><span>%{optimizedData.analysis.scores?.education || 0}</span></div>
+                               <div className="flex justify-between text-xs font-bold text-slate-700 mb-1.5"><span>{translations[cvLanguage].scoreEducation}</span><span>{fmtScore(optimizedData.analysis.scores?.education)}</span></div>
                                <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-purple-500 rounded-full transition-all duration-1000" style={{width: `${optimizedData.analysis.scores?.education || 0}%`}}></div></div>
                             </div>
                          </div>
+                      </div>
+
+                      <div className="space-y-3 mb-6">
+                        <VerificationPanel
+                          verification={optimizedData.verification}
+                          inputFlags={optimizedData.meta?.inputFlags || []}
+                          lang={cvLanguage}
+                          onRevert={handleRevertClaim}
+                          revertedIds={revertedClaims}
+                        />
+                        <RequirementBreakdown analysis={optimizedData.analysis} lang={cvLanguage} />
+                        <PipelineTrace meta={optimizedData.meta} lang={cvLanguage} />
                       </div>
 
                       <div className="space-y-4">
@@ -2348,6 +1991,7 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
                         </div>
                         
                         {/* SOFT SKILLS */}
+                        {optimizedData.analysis.matches?.soft_skills?.length > 0 && (
                         <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                             <h4 className="flex items-center gap-2 text-sm font-bold text-slate-800 mb-3">
                                 <Users className="w-4 h-4 text-purple-600" /> {translations[cvLanguage].matchesSoft}
@@ -2358,6 +2002,7 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
                                 ))}
                             </div>
                         </div>
+                        )}
 
                         {/* YENİ: SMART & BATCH GAPS (EKSİKLER) KISMI */}
                         {optimizedData.analysis.gaps?.length > 0 && (
@@ -2379,21 +2024,56 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
                                   ))}
                               </ul>
                               
-                              {/* TOPLU YEDİRME BUTONU */}
-                              {selectedGaps.length > 0 && (
+                              {/* TOPLU EKLEME: önce kullanıcı onayı (uydurma deneyim yazılmaz) */}
+                              {selectedGaps.length > 0 && !gapConfirmOpen && (
                                 <button 
-                                  onClick={handleIntegrateBatchGaps} 
-                                  disabled={isIntegratingGaps} 
-                                  className="w-full mt-4 bg-black text-white px-4 py-3 rounded-lg font-bold hover:bg-slate-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-md disabled:opacity-50"
+                                  onClick={() => { setGapConfirmOpen(true); setGapNotice(null); }}
+                                  className="w-full mt-4 bg-black text-white px-4 py-3 rounded-lg font-bold hover:bg-slate-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 shadow-md"
                                 >
-                                  {isIntegratingGaps ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                                  <Wand2 className="w-4 h-4" />
                                   {translations[cvLanguage].quickAddBtn} ({selectedGaps.length})
                                 </button>
                               )}
+                              {selectedGaps.length > 0 && gapConfirmOpen && (
+                                <div className="mt-4 p-3 bg-white rounded-lg border border-rose-200 space-y-3">
+                                  <p className="text-[11px] text-slate-600 leading-relaxed">
+                                    {cvLanguage === 'en'
+                                      ? 'We only add what is true. Tools and skills are added as skills. For experience items, briefly describe what you actually did — nothing is invented.'
+                                      : 'Sadece gerçek olanı ekleriz. Araç ve yetenekler "Yetenekler" bölümüne eklenir. Deneyim maddeleri için gerçekte ne yaptığınızı kısaca yazın — hiçbir şey uydurulmaz.'}
+                                  </p>
+                                  <textarea
+                                    value={gapNotes}
+                                    onChange={(e) => setGapNotes(e.target.value)}
+                                    rows={3}
+                                    maxLength={3000}
+                                    placeholder={cvLanguage === 'en' ? 'e.g. In my internship I collected requirements from 3 customer teams…' : 'Örn: Stajımda 3 müşteri ekibiyle görüşerek gereksinimleri dokümante ettim…'}
+                                    className="w-full p-2.5 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-black outline-none resize-none"
+                                  />
+                                  <label className="flex items-start gap-2 text-[11px] font-semibold text-slate-700 cursor-pointer">
+                                    <input type="checkbox" checked={gapConfirmed} onChange={(e) => setGapConfirmed(e.target.checked)} className="mt-0.5 w-4 h-4" />
+                                    {cvLanguage === 'en' ? 'I confirm I genuinely have the selected qualifications.' : 'Seçtiğim yetkinliklere gerçekten sahip olduğumu onaylıyorum.'}
+                                  </label>
+                                  <div className="flex gap-2">
+                                    <button onClick={() => setGapConfirmOpen(false)} className="flex-1 px-3 py-2.5 rounded-lg text-xs font-bold border border-slate-300 hover:bg-slate-50">
+                                      {cvLanguage === 'en' ? 'Cancel' : 'Vazgeç'}
+                                    </button>
+                                    <button
+                                      onClick={handleIntegrateBatchGaps}
+                                      disabled={isIntegratingGaps || !gapConfirmed}
+                                      className="flex-[2] bg-black text-white px-3 py-2.5 rounded-lg text-xs font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      {isIntegratingGaps ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}
+                                      {cvLanguage === 'en' ? 'Add to CV' : "CV'ye Ekle"} ({selectedGaps.length})
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                              {gapNotice && <p className="mt-3 text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2">{gapNotice}</p>}
                           </div>
                         )}
 
                         {/* ADDITIONS */}
+                        {optimizedData.analysis.additions?.length > 0 && (
                         <div className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100">
                             <h4 className="flex items-center gap-2 text-sm font-bold text-emerald-800 mb-3">
                                 <Lightbulb className="w-4 h-4 text-emerald-600" /> {translations[cvLanguage].added}
@@ -2404,6 +2084,7 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
                                 ))}
                             </ul>
                         </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -3072,7 +2753,7 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
                               </h3>
                               <p className="text-[10px] sm:text-xs text-zinc-500 font-medium tracking-wide">
                                   {!interviewType ? 'SEÇİM BEKLENİYOR' : (interviewType === 'hr' ? 'GENEL / İK MÜLAKATI' : 'TEKNİK MÜLAKAT')}
-                                  {interviewType && !isInterviewFinished && ` • Soru ${questionCount}/10`}
+                                  {interviewType && !isInterviewFinished && ` • Soru ${questionCount}/${interviewMax}`}
                                   {isInterviewFinished && ` • Tamamlandı`}
                               </p>
                           </div>
@@ -3190,6 +2871,23 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
                                       </div>
 
                                       <div className="space-y-4 relative z-10">
+                                          {/* Rubrik: genel puan bu boyutların ortalamasından hesaplanır */}
+                                          {interviewReport.rubric?.length > 0 && (
+                                              <div className="bg-[#1a1a1a] rounded-xl p-4 border border-zinc-800/50 space-y-2">
+                                                  {interviewReport.rubric.map((r) => (
+                                                      <div key={r.dimension}>
+                                                          <div className="flex justify-between text-[11px] font-bold text-zinc-300 mb-1">
+                                                              <span>{RUBRIC_LABELS[r.dimension] || r.dimension}</span>
+                                                              <span className="font-mono text-zinc-400">{r.score}/5</span>
+                                                          </div>
+                                                          <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden">
+                                                              <div className="h-full bg-white rounded-full" style={{ width: `${r.score * 20}%` }} />
+                                                          </div>
+                                                          {r.note && <p className="text-[11px] text-zinc-500 mt-1 leading-snug">{r.note}</p>}
+                                                      </div>
+                                                  ))}
+                                              </div>
+                                          )}
                                           {/* Güçlü Yönler */}
                                           {interviewReport.strengths && interviewReport.strengths.length > 0 && (
                                               <div className="bg-[#1a1a1a] rounded-xl p-4 border border-zinc-800/50">
