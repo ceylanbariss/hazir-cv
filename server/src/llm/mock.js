@@ -164,10 +164,10 @@ const handlers = {
     });
   },
 
-  interview_turn(text) {
+  interview_turn(text, _opts, system = '') {
     const history = between(text, 'history').split('\n').filter(Boolean);
     const asked = history.filter((l) => l.startsWith('Interviewer:')).length;
-    const plan = [...text.matchAll(/^\d+\. (.+)$/gm)].map((m) => m[1]);
+    const plan = [...system.matchAll(/^\d+\. (.+)$/gm)].map((m) => m[1]);
     const last = history.at(-1) || '';
     if (/Candidate:\s*(asd+|sana ne|cırt)\s*$/i.test(last)) {
       return respond({ message: 'Bu tavır profesyonel bir mülakatta kabul edilemez. Görüşmeyi burada sonlandırıyorum.', terminate: true, terminate_reason: 'abusive' });
