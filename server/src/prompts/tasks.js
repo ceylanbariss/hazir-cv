@@ -9,7 +9,7 @@
 import * as S from './schemas.js';
 import { sanitizeForPrompt as clean } from '../pipeline/text.js';
 
-export const PROMPT_VERSION = '3.0.0';
+export const PROMPT_VERSION = '3.1.0';
 
 const langName = (lang) => (lang === 'en' ? 'English' : 'Turkish');
 
@@ -132,13 +132,18 @@ verdict:
 - "supported": stated in, or directly and safely implied by, the original CV.
 - "embellished": based on the CV but exaggerates scope, seniority, ownership or impact, or adds specifics (numbers, tools, outcomes) the CV does not contain.
 - "unsupported": no basis in the original CV.
-note: one short sentence in ${langName(lang)}; for non-supported verdicts say exactly what is not backed by the CV.
-Rephrasing, translation and synonymous terminology are fine ("REST servisleri" == "RESTful API"). Be strict about facts, lenient about wording.
+note: one short sentence. The note MUST be written in ${langName(lang)}. For non-supported verdicts say exactly what is not backed by the CV; for supported claims use "".
+
+How to read claims by section:
+- section "skills": the claim is only "the candidate has or has used this skill". It is SUPPORTED if the skill, an obvious equivalent, or a clearly broader category of something the CV shows appears ANYWHERE in the CV (experience, projects, summary, education, skills list). Example: a CV mentioning Odoo modules supports "Odoo ERP"; a CV describing AI-assisted development tools supports "Yapay Zeka". It does NOT matter whether the original CV had it in a skills list.
+- section "experience": check the action, scope, tools, numbers and outcome against the original CV.
+- section "summary": check each factual statement (years, roles, domains, achievements).
+Rephrasing, translation and synonymous terminology are fine ("REST servisleri" == "RESTful API"). Be strict about facts, lenient about wording and placement.
 Return one verdict per claim id.
 ${GUARD}`,
     parts: [
       {
-        text: `${env('cv', cv, 30_000)}\n\n<claims>\n${JSON.stringify(claims.map((c) => ({ id: c.id, text: c.text })))}\n</claims>`,
+        text: `${env('cv', cv, 30_000)}\n\n<claims>\n${JSON.stringify(claims.map((c) => ({ id: c.id, section: c.section, text: c.text })))}\n</claims>`,
       },
     ],
   };

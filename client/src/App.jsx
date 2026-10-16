@@ -1965,6 +1965,15 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
                          </div>
                       </div>
 
+                      {optimizedData.analysis.low_confidence === 'few_requirements' && (
+                        <p className="-mt-3 mb-6 text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex gap-1.5">
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                          {cvLanguage === 'en'
+                            ? 'Only a few concrete requirements were found in this posting, so the score is based on limited information. Paste the full posting (responsibilities and qualifications) for a reliable analysis.'
+                            : 'Bu ilanda az sayıda net gereksinim bulundu; skor sınırlı bilgiye dayanıyor. Güvenilir bir analiz için ilanın tamamını (görev tanımı ve aranan nitelikler) yapıştırın.'}
+                        </p>
+                      )}
+
                       <div className="space-y-3 mb-6">
                         <VerificationPanel
                           verification={optimizedData.verification}

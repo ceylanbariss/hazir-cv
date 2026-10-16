@@ -137,6 +137,9 @@ export async function runTailorPipeline(ctx, { cv, jobPosting, lang }, onStage =
 
   const trace = ctx.trace || [];
   const sum = (k) => trace.reduce((s, x) => s + (x[k] || 0), 0);
+  // Too few concrete requirements make any percentage misleading; tell the UI.
+  if (enriched.length < 4) analysis.low_confidence = 'few_requirements';
+
   const inputFlags = [
     ...(looksLikeInjection(cv) ? ['possible_prompt_injection_in_cv'] : []),
     ...(looksLikeInjection(jobPosting) ? ['possible_prompt_injection_in_job_posting'] : []),

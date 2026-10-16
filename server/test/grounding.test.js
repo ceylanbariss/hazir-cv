@@ -69,3 +69,10 @@ test('addedKeywords lists posting terms surfaced by the rewrite', () => {
   const reqs = [{ status: 'met', keywords: ['RESTful API', 'Python'] }, { status: 'missing', keywords: ['Kubernetes'] }];
   assert.deepEqual(addedKeywords(CV, 'Python ile RESTful API geliştirdim. Kubernetes', reqs), ['RESTful API']);
 });
+
+test('verify prompt tells the judge which section a claim comes from', async () => {
+  const { verifyClaims } = await import('../src/prompts/tasks.js');
+  const t = verifyClaims({ cv: 'x', claims: [{ id: 'K1', section: 'skills', text: 'Odoo ERP' }], lang: 'tr' });
+  assert.match(t.parts[0].text, /"section":"skills"/);
+  assert.match(t.system, /MUST be written in Turkish/);
+});

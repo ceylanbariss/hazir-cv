@@ -50,3 +50,11 @@ test('prompt-injection text in the CV does not create evidence', async () => {
   assert.ok(!JSON.stringify(r.experience).includes('10 yıl'));
   assert.deepEqual(r.meta.inputFlags, ['possible_prompt_injection_in_cv']);
 });
+
+test('a posting with very few requirements is flagged as low confidence', async () => {
+  const c = CASES.find((x) => x.id === 'tr_frontend_fit');
+  const ctx = { llm: createMockProvider(), trace: [] };
+  const r = await runTailorPipeline(ctx, { cv: c.cv, jobPosting: 'Yapay zeka stajyeri arıyoruz. React bilen adaylar başvurabilir.', lang: 'tr' });
+  assert.ok(r.analysis.requirements.length < 4);
+  assert.equal(r.analysis.low_confidence, 'few_requirements');
+});
