@@ -1,0 +1,71 @@
+name: CI
+
+on:
+  push:
+    branches: [main, v3]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_live_eval:
+        description: Run the eval suite against the real model (uses GEMINI_API_KEY secret, costs ~$0.05)
+        type: boolean
+        default: false
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - name: Unit + integration tests (mock LLM)
+        run: npm test
+      - name: Eval harness smoke test (mock LLM)
+        run: npm run eval:mock
+
+  client:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - run: npm ci
+      - run: npm run build
+
+  live-eval:
+    if: github.event_name == 'workflow_dispatch' && inputs.run_live_eval
+    needs: api
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+      - name: Eval against Gemini
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: node eval/run.js --repeat 2 --out eval/results/live.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: eval-results
+          path: server/eval/results/
