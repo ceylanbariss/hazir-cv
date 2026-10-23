@@ -4,6 +4,8 @@ import { requestContext, securityHeaders, corsOptions, errorHandler } from './li
 import { createRateLimiter, createSemaphore, createBudget, rateLimit } from './lib/guards.js';
 import { Errors } from './lib/errors.js';
 import { v1Router } from './routes/v1.js';
+import { automationRouter } from './routes/automation.js';
+import { createSupabase } from './automation/supabase.js';
 
 const HOUR = 60 * 60 * 1000;
 
@@ -11,7 +13,7 @@ const HOUR = 60 * 60 * 1000;
  * Builds the Express app. Dependencies are injected so tests can run the real
  * HTTP stack against a mock LLM.
  */
-export function createApp({ config, llm, logger, budget, semaphore, limiters } = {}) {
+export function createApp({ config, llm, logger, budget, semaphore, limiters, supabase } = {}) {
   const deps = {
     config,
     llm,
@@ -21,6 +23,7 @@ export function createApp({ config, llm, logger, budget, semaphore, limiters } =
   const lim = limiters || {
     heavy: createRateLimiter({ windowMs: HOUR, max: 20 }), // full pipelines, OCR, reports
     chat: createRateLimiter({ windowMs: HOUR, max: 150 }), // interview turns, editor assists
+    automation: createRateLimiter({ windowMs: HOUR, max: 600 }), // signed-in panel
   };
 
   const app = express();
@@ -31,6 +34,14 @@ export function createApp({ config, llm, logger, budget, semaphore, limiters } =
   app.use(cors(corsOptions(config)));
 
   app.get('/', (req, res) => res.json({ service: 'hazircv-api', status: 'ok', docs: '/api/v1/health' }));
+  const db =
+    supabase ||
+    (config.automationEnabled ? createSupabase({ url: config.SUPABASE_URL, serviceKey: config.SUPABASE_SERVICE_ROLE_KEY }) : null);
+  if (db) {
+    app.use('/api/v1/automation', automationRouter({ supabase: db, limiter: lim.automation || lim.chat }));
+  } else {
+    app.use('/api/v1/automation', (req, res, next) => next(Errors.notConfigured()));
+  }
   app.use('/api/v1', v1Router({ deps, limiters: lim }));
 
   if (config.ENABLE_LEGACY_OPTIMIZE) {

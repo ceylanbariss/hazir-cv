@@ -43,5 +43,9 @@ export const Errors = {
       details,
     ),
   forbiddenOrigin: () => new AppError('FORBIDDEN_ORIGIN', 403, 'Bu kaynaktan erişime izin verilmiyor.'),
+  unauthorized: (message = 'Oturum bulunamadı veya süresi doldu. Lütfen tekrar giriş yapın.') =>
+    new AppError('UNAUTHORIZED', 401, message),
+  notConfigured: () =>
+    new AppError('NOT_CONFIGURED', 503, 'Başvuru otomasyonu bu sunucuda henüz yapılandırılmadı.'),
   notFound: () => new AppError('NOT_FOUND', 404, 'Bulunamadı.'),
 };

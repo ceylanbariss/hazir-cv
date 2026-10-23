@@ -47,6 +47,10 @@ const EnvSchema = z.object({
   // Kept only for a zero-downtime migration from the v2 client. Off by default.
   ENABLE_LEGACY_OPTIMIZE: bool(false),
 
+  // Başvuru otomasyonu modülü (Supabase). Boşsa /api/v1/automation devre dışı kalır.
+  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
+
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error', 'silent']).default('info'),
 });
 
@@ -62,5 +66,13 @@ export function loadConfig(env = process.env) {
   }
   // Tolerate keys pasted with quotes/whitespace in hosting dashboards.
   if (cfg.GEMINI_API_KEY) cfg.GEMINI_API_KEY = cfg.GEMINI_API_KEY.replace(/['"]/g, '').trim();
+  for (const k of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']) {
+    if (cfg[k]) cfg[k] = cfg[k].replace(/['"]/g, '').trim();
+  }
+  if (cfg.SUPABASE_URL) cfg.SUPABASE_URL = cfg.SUPABASE_URL.replace(/\/$/, '');
+  if (Boolean(cfg.SUPABASE_URL) !== Boolean(cfg.SUPABASE_SERVICE_ROLE_KEY)) {
+    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set together.');
+  }
+  cfg.automationEnabled = Boolean(cfg.SUPABASE_URL);
   return Object.freeze({ ...cfg, originPattern: new RegExp(cfg.ALLOWED_ORIGIN_PATTERN) });
 }
