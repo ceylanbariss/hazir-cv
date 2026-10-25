@@ -10,10 +10,18 @@ export function Shell({ children }) {
 export function Wordmark({ to = '/' }) {
   return (
     <button type="button" className="hz-mark" onClick={() => navigate(to)} aria-label="Hazır CV ana sayfa">
-      <svg width="24" height="28" viewBox="0 0 24 28" aria-hidden="true">
-        <rect x="1" y="1" width="22" height="26" fill="#10b981" stroke="#0a0a0a" strokeWidth="1.5" strokeDasharray="2.6 2" />
-        <rect x="5.5" y="5.5" width="13" height="17" fill="none" stroke="#0a0a0a" strokeWidth="1.4" />
-        <path d="M8 18 L11 14 L13 16 L16 11" fill="none" stroke="#0a0a0a" strokeWidth="1.4" />
+      {/* CV aracındaki Hazır CV logosu (favicon ile aynı) */}
+      <svg width="30" height="30" viewBox="0 0 24 24" aria-hidden="true">
+        <defs>
+          <linearGradient id="hz-logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#6C6D74" />
+            <stop offset="50%" stopColor="#262E36" />
+            <stop offset="100%" stopColor="#000000" />
+          </linearGradient>
+        </defs>
+        <path fill="url(#hz-logo-grad)" d="M5.625 1.5c-1.036 0-1.875.84-1.875 1.875v17.25c0 1.035.84 1.875 1.875 1.875h12.75c1.035 0 1.875-.84 1.875-1.875V1.5H5.625z" />
+        <path fill="#FFFFFF" d="M10.58 15.75l-3.48-3.48 1.06-1.06 2.42 2.42 6.23-6.23 1.06 1.06-7.29 7.29z" />
+        <path fill="url(#hz-logo-grad)" d="M18.375 1.5h1.875v5.25h-5.25V1.5h3.375z" opacity="0.85" />
       </svg>
       Hazır CV
     </button>
