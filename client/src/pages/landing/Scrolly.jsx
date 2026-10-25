@@ -60,20 +60,20 @@ function LaptopUi({ ui }) {
   const on = (k) => (ui === k ? 'px-ui on' : 'px-ui');
   return (
     <div className="px-screen" style={{ transform: LAPTOP_M }} aria-hidden="true">
-      <div className="px-ui-top"><b>Hazır CV</b><span>Pınar Kaya</span></div>
+      <div className="px-ui-top"><b>Hazır CV</b><span>Pınar</span></div>
       <div className={on('home')}>
         <p className="px-ui-h">Günaydın Pınar</p>
         <div className="px-ui-card"><strong>Bugün 3 başvuru hazır</strong><span>Öğlen taraması tamamlandı. Onayını bekliyorlar.</span><i>Başvurulara bak</i></div>
       </div>
       <div className={on('roles')}>
         <p className="px-ui-h">Hangi işlere başvuralım?</p>
-        <div className="px-chips">{['İş Analisti', 'Business Analyst', 'ERP Danışmanı'].map((s, i) => <span key={s} style={v(1 + i)}>{s}</span>)}</div>
-        <div className="px-ui-row" style={{ ...v(4), gridTemplateColumns: '1fr auto' }}><span><strong>Ürün Analisti</strong><em>Jira ve gereksinim analizi deneyiminle uyumlu.</em></span><i>Ekle</i></div>
-        <div className="px-chips">{['Eskişehir', 'İstanbul', 'Uzaktan'].map((s, i) => <span key={s} style={v(5 + i * 0.7)}>{s}</span>)}</div>
+        <div className="px-chips">{['Veri Analisti', 'Süreç Analisti', 'Raporlama Uzmanı'].map((s, i) => <span key={s} style={v(1 + i)}>{s}</span>)}</div>
+        <div className="px-ui-row" style={{ ...v(4), gridTemplateColumns: '1fr auto' }}><span><strong>İş Zekâsı Uzmanı</strong><em>Power BI ile hazırladığın raporlama panolarıyla uyumlu.</em></span><i>Ekle</i></div>
+        <div className="px-chips">{['Ankara', 'İzmir', 'Uzaktan'].map((s, i) => <span key={s} style={v(5 + i * 0.7)}>{s}</span>)}</div>
       </div>
       <div className={on('scan')}>
         <p className="px-ui-h">Onay bekleyenler</p>
-        {[['92', 'Jr. İş Analisti', 'Atlas Yazılım'], ['86', 'ERP Danışmanı', 'Kuzey ERP'], ['79', 'Business Analyst', 'Nova Dijital'], ['38', 'Makine Öğrenmesi Mühendisi', 'Vega AI']].map(([s, r, c], i) => (
+        {[['92', 'Jr. Veri Analisti', 'Atlas Yazılım'], ['86', 'Süreç Analisti', 'Kuzey Lojistik'], ['79', 'Raporlama Uzmanı', 'Nova Dijital'], ['38', 'Kıdemli Yazılım Mimarı', 'Vega Teknoloji']].map(([s, r, c], i) => (
           <div className="px-ui-row" key={c} style={v(1 + i * 1.6)} data-out={Number(s) < 60 || undefined}>
             <b>{s}</b><span><strong>{r}</strong><em>{c}</em></span><i>{Number(s) < 60 ? 'Elendi' : 'Onayla'}</i>
           </div>
@@ -81,9 +81,9 @@ function LaptopUi({ ui }) {
       </div>
       <div className={on('letter')}>
         <div className="px-letter">
-          <p className="px-subject">Konu: Jr. İş Analisti başvurusu – Pınar Kaya</p>
-          {['Merhaba Atlas Yazılım ekibi,', 'Jr. İş Analisti ilanınızı gördüm. Bilişim Sistemleri Mühendisliği mezunuyum; stajımda SQL ve Jira ile gereksinim analizi yaptım.', 'Ekibinize katkı sunmak isterim, CV\'m ektedir.', 'Saygılarımla, Pınar'].map((l, i) => <p key={i} style={v(1 + i * 1.5)}>{l}</p>)}
-          <span className="px-attach" style={v(7)}>Ek: Pinar_Kaya_CV.pdf</span>
+          <p className="px-subject">Konu: Jr. Veri Analisti başvurusu – Pınar</p>
+          {['Merhaba Atlas Yazılım ekibi,', 'Jr. Veri Analisti ilanınızı gördüm. Endüstri Mühendisliği mezunuyum; stajımda Excel ve Power BI ile haftalık satış raporlarını otomatikleştirdim.', 'Ekibinize katkı sunmak isterim, CV\'m ektedir.', 'Saygılarımla, Pınar'].map((l, i) => <p key={i} style={v(1 + i * 1.5)}>{l}</p>)}
+          <span className="px-attach" style={v(7)}>Ek: Pinar_CV.pdf</span>
         </div>
       </div>
     </div>
@@ -95,7 +95,7 @@ function PhoneUi({ which }) {
     <div className="px-phone" style={{ transform: PHONE_M[which] }} aria-hidden="true">
       <div className="px-phone-time">12:06<small>Pazartesi, 26 Ekim</small></div>
       <div className="px-phone-list">
-        <div className="px-notif" style={v(1)}><b>Hazır CV</b><span>3 başvuru gönderildi: Atlas Yazılım, Kuzey ERP, Nova Dijital</span></div>
+        <div className="px-notif" style={v(1)}><b>Hazır CV</b><span>3 başvuru gönderildi: Atlas Yazılım, Kuzey Lojistik, Nova Dijital</span></div>
         <div className="px-notif" style={v(3)}><b>E-posta</b><span>Atlas Yazılım: Ön görüşme daveti</span></div>
         <div className="px-notif" style={v(5)}><b>Hazır CV</b><span>Günlük özet hazır: 12 yeni ilan</span></div>
       </div>
@@ -186,15 +186,15 @@ export default function Scrolly() {
               {key === 'cv' && (
                 <div className="px-float" style={{ left: 1330, top: 300, transform: `scale(${kart(key)})` }} aria-hidden="true">
                   <p style={v(2)}>Profil çıkarıldı</p>
-                  <strong style={v(3)}>İş Analisti, yeni mezun</strong>
-                  <div className="px-chips">{['SQL', 'Jira', 'BPMN', 'Scrum', 'Excel'].map((s, i) => <span key={s} style={v(4 + i * 0.6)}>{s}</span>)}</div>
+                  <strong style={v(3)}>Veri Analisti, yeni mezun</strong>
+                  <div className="px-chips">{['Excel', 'Power BI', 'Python', 'İstatistik', 'Tableau'].map((s, i) => <span key={s} style={v(4 + i * 0.6)}>{s}</span>)}</div>
                 </div>
               )}
               {key === 'zarf' && (
                 <div className="px-float px-toast" style={{ left: 1380, top: 280, transform: `scale(${kart(key)})` }} aria-hidden="true">
                   <p style={v(2)}>Gönderildi</p>
                   <strong style={v(3)}>ik@atlasyazilim.com.tr</strong>
-                  <span style={v(4)}>Jr. İş Analisti başvurusu, CV ekli</span>
+                  <span style={v(4)}>Jr. Veri Analisti başvurusu, CV ekli</span>
                 </div>
               )}
             </div>
