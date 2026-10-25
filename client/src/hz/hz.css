@@ -294,8 +294,8 @@
 .px-attach { justify-self: start; margin-top: 4px; font-family: var(--f-ui); font-size: 15px; padding: 6px 12px; background: #f1f5f9; border: 1.5px solid var(--cizgi); border-radius: 4px; }
 
 /* Telefon ekranı (360×780 yerel, dikey kilit ekranı) */
-.px-phone { position: absolute; left: 0; top: 0; width: 360px; height: 780px; transform-origin: 0 0; border-radius: 34px; overflow: hidden; display: grid; align-content: start; gap: 18px; padding: 70px 18px 18px;
-  background: linear-gradient(170deg, #eef4f1, #e6edf5 55%, #f4f1ea); font-family: var(--f-ui); color: #0f172a; }
+.px-phone { position: absolute; left: 0; top: 0; width: 360px; height: 780px; transform-origin: 0 0; border-radius: 6px 6px 40px 40px; overflow: hidden; display: grid; align-content: start; gap: 18px; padding: 70px 18px 18px;
+  background: linear-gradient(180deg, #fbfcfc 0%, #eef4f1 18%, #e6edf5 60%, #f4f1ea); font-family: var(--f-ui); color: #0f172a; }
 .px-phone-time { text-align: center; font-size: 76px; font-weight: 700; line-height: 1; display: grid; gap: 10px; margin-bottom: 26px; }
 .px-phone-time small { font-size: 18px; font-weight: 400; color: #475569; }
 .px-phone-list { display: grid; gap: 10px; }

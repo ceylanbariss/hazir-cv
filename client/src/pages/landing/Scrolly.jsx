@@ -9,8 +9,8 @@ const IMAGES = {
   masa: { src: 'masa', w: 2576, h: 1438, quad: [[1608, 434], [2273, 475], [2164, 1038], [1519, 883]] },
   cv: { src: 'cv', w: 2576, h: 1438 },
   zarf: { src: 'zarf', w: 2576, h: 1438 },
-  telefon: { src: 'telefon', w: 2576, h: 1438, quad: [[1209, 382], [1494, 426], [1380, 1084], [1078, 1022]] },
-  telefonDikey: { src: 'telefon-dikey', w: 1438, h: 2576, quad: [[665, 1135], [938, 1189], [832, 1809], [553, 1745]] },
+  telefon: { src: 'telefon', w: 2576, h: 1438, quad: [[1181, 405], [1496, 433], [1405, 1088], [1071, 1044]] },
+  telefonDikey: { src: 'telefon-dikey', w: 1438, h: 2576, quad: [[641, 1155], [940, 1194], [850, 1815], [547, 1766]] },
 };
 const srcOf = (key, wide) => `/img/acilis/${IMAGES[key].src}${wide ? '' : '-1600'}.webp`;
 // Fotoğraf üstü kartlar 1376 px genişliğe göre tasarlandı; büyük görselde orantılı büyütülür.
@@ -60,9 +60,9 @@ function LaptopUi({ ui }) {
   const on = (k) => (ui === k ? 'px-ui on' : 'px-ui');
   return (
     <div className="px-screen" style={{ transform: LAPTOP_M }} aria-hidden="true">
-      <div className="px-ui-top"><b>Hazır CV</b><span>Elif Kaya</span></div>
+      <div className="px-ui-top"><b>Hazır CV</b><span>Pınar Kaya</span></div>
       <div className={on('home')}>
-        <p className="px-ui-h">Günaydın Elif</p>
+        <p className="px-ui-h">Günaydın Pınar</p>
         <div className="px-ui-card"><strong>Bugün 3 başvuru hazır</strong><span>Öğlen taraması tamamlandı. Onayını bekliyorlar.</span><i>Başvurulara bak</i></div>
       </div>
       <div className={on('roles')}>
@@ -81,9 +81,9 @@ function LaptopUi({ ui }) {
       </div>
       <div className={on('letter')}>
         <div className="px-letter">
-          <p className="px-subject">Konu: Jr. İş Analisti başvurusu – Elif Kaya</p>
-          {['Merhaba Atlas Yazılım ekibi,', 'Jr. İş Analisti ilanınızı gördüm. Bilişim Sistemleri Mühendisliği mezunuyum; stajımda SQL ve Jira ile gereksinim analizi yaptım.', 'Ekibinize katkı sunmak isterim, CV\'m ektedir.', 'Saygılarımla, Elif'].map((l, i) => <p key={i} style={v(1 + i * 1.5)}>{l}</p>)}
-          <span className="px-attach" style={v(7)}>Ek: Elif_Kaya_CV.pdf</span>
+          <p className="px-subject">Konu: Jr. İş Analisti başvurusu – Pınar Kaya</p>
+          {['Merhaba Atlas Yazılım ekibi,', 'Jr. İş Analisti ilanınızı gördüm. Bilişim Sistemleri Mühendisliği mezunuyum; stajımda SQL ve Jira ile gereksinim analizi yaptım.', 'Ekibinize katkı sunmak isterim, CV\'m ektedir.', 'Saygılarımla, Pınar'].map((l, i) => <p key={i} style={v(1 + i * 1.5)}>{l}</p>)}
+          <span className="px-attach" style={v(7)}>Ek: Pinar_Kaya_CV.pdf</span>
         </div>
       </div>
     </div>
