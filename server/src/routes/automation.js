@@ -12,6 +12,7 @@ import * as P from '../automation/prompts.js';
 const uid = (req) => encodeURIComponent(req.user.id);
 const MAX_CVS = 3;
 const MAX_PDF_BYTES = 5 * 1024 * 1024;
+const AI_SOFT_FAILURES = new Set(['UPSTREAM_ERROR', 'INVALID_MODEL_OUTPUT', 'DAILY_CAPACITY_REACHED', 'BUSY']);
 
 const WELCOME = {
   kind: 'welcome',
@@ -119,17 +120,25 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget 
     if (bytes.length > MAX_PDF_BYTES) throw Errors.badRequest('PDF en fazla 5 MB olabilir.');
     if (bytes.subarray(0, 5).toString('latin1') !== '%PDF-') throw Errors.badRequest('Dosya geçerli bir PDF değil.');
 
-    budget.assertAvailable();
-    const ctx = ctxFor(req);
-    const check = await runTask(ctx, P.classifyDocument({ cv: data.text }));
-    if (!check.is_cv) throw Errors.notCv();
-    const profile = await runTask(ctx, P.extractProfile({ cv: data.text }));
+    // Yapay zeka analizi (CV kontrolü + profil). Servis geçici olarak ulaşılamazsa CV yine kaydedilir,
+    // profil sonradan çıkarılabilir; kullanıcı kurulumda takılmaz.
+    let profile = null;
+    try {
+      budget.assertAvailable();
+      const ctx = ctxFor(req);
+      const check = await runTask(ctx, P.classifyDocument({ cv: data.text }));
+      if (!check.is_cv) throw Errors.notCv();
+      profile = await runTask(ctx, P.extractProfile({ cv: data.text }));
+    } catch (err) {
+      if (err.code === 'NOT_A_CV' || !AI_SOFT_FAILURES.has(err.code)) throw err;
+      req.log.warn('cv_analysis_skipped', { code: err.code });
+    }
 
     const id = randomUUID();
     const storagePath = `${req.user.id}/${id}.pdf`;
     await supabase.upload('cvs', storagePath, bytes, 'application/pdf');
     const [cv] = await supabase.insert('cvs', [
-      { id, user_id: req.user.id, label: data.label, storage_path: storagePath, extracted_profile: { ...profile, source_text: data.text.slice(0, 40_000) }, is_default: existing.length === 0 },
+      { id, user_id: req.user.id, label: data.label, storage_path: storagePath, extracted_profile: { ...(profile || { pending: true }), source_text: data.text.slice(0, 40_000) }, is_default: existing.length === 0 },
     ]);
     const { source_text, ...publicProfile } = cv.extracted_profile; // eslint-disable-line no-unused-vars
     res.status(201).json({ cv: { id: cv.id, label: cv.label, is_default: cv.is_default, created_at: cv.created_at, extracted_profile: publicProfile } });
