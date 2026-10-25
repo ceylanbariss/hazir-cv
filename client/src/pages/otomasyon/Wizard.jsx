@@ -133,7 +133,7 @@ function StepCvs({ cvs, setCvs }) {
                     style={{ minHeight: 38, maxWidth: 320, fontWeight: 700 }}
                     onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== cv.label) act(() => updateCv(cv.id, { label: v })); }}
                   />
-                  <p>{[p.headline, SENIORITY_LABEL[p.seniority], p.city].filter(Boolean).join(', ')}{cv.is_default ? '. Varsayılan CV.' : ''}</p>
+                  <p>{p.pending ? 'CV kaydedildi. Profil analizi şu an yapılamadı; asistan çalışmaya başlamadan önce tekrar denenecek.' : [p.headline, SENIORITY_LABEL[p.seniority], p.city].filter(Boolean).join(', ')}{cv.is_default ? ' Varsayılan CV.' : ''}</p>
                   {p.skills?.length > 0 && (
                     <div className="hz-chips">{p.skills.slice(0, 8).map((s) => <span className="hz-chip hz-chip-plain" key={s}>{s}</span>)}</div>
                   )}
