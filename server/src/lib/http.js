@@ -46,7 +46,7 @@ export function corsOptions(config) {
       if (isOriginAllowed(origin, config)) return cb(null, true);
       cb(Errors.forbiddenOrigin());
     },
-    methods: ['GET', 'POST', 'PATCH', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Accept', 'X-Request-Id', 'Authorization'],
     exposedHeaders: ['X-Request-Id', 'Retry-After', 'RateLimit-Remaining'],
     maxAge: 600,
