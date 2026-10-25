@@ -12,20 +12,6 @@ export default function Landing() {
         <button type="button" className="hz-link" onClick={() => navigate('/otomasyon')}>Hesabına gir</button>
       </TopBar>
       <main>
-        <section className="hz-wrap hz-hero" style={{ minHeight: 'min(78vh, 720px)', alignContent: 'center' }}>
-          <div>
-            <h1 className="hz-display" style={{ maxWidth: '13ch' }}>Her gün öğlen, başvuruların hazır.</h1>
-            <span className="hz-scroll-hint">Nasıl çalıştığını görmek için kaydır</span>
-          </div>
-          <div style={{ display: 'grid', gap: 18 }}>
-            <p className="hz-lead">Hazır CV asistanı sana uygun ilanları bulur, kendi CV'lerinden birini seçer ve ilana özel ön yazını hazırlar. Sen onaylarsın, başvuru Gmail'inden gider. Ücretsiz.</p>
-            <div className="hz-hero-cta">
-              <button type="button" className="hz-btn hz-btn-posta" onClick={() => navigate('/otomasyon')}>Asistanı kur</button>
-              <button type="button" className="hz-btn" onClick={() => navigate('/cv')}>Tek ilana CV hazırla</button>
-            </div>
-          </div>
-        </section>
-
         <Scrolly />
 
         <section className="hz-wrap">
