@@ -1,5 +1,5 @@
 /* Hazır CV — "posta masası" tasarım dili.
-   Kâğıt, mürekkep ve PTT sarısı: başvuru bir mektuptur; asistan her gün postayı hazırlar.
+   CV aracıyla aynı renkler: açık gri zemin, beyaz kâğıt, siyah mürekkep, tek vurgu zümrüt yeşili: başvuru bir mektuptur; asistan her gün postayı hazırlar.
    Başlık ve arayüz: TeX Gyre Adventor. Metin ve mektuplar: TeX Gyre Schola (GUST lisansı). */
 
 @font-face { font-family: 'Adventor'; src: url('/fonts/texgyreadventor-regular.woff') format('woff'); font-weight: 400; font-display: swap; }
@@ -9,16 +9,16 @@
 @font-face { font-family: 'Schola'; src: url('/fonts/texgyreschola-bold.woff') format('woff'); font-weight: 700; font-display: swap; }
 
 .hz {
-  --kagit: #e7ebf1;
-  --yuzey: #fbfcfd;
-  --murekkep: #1a2744;
-  --soluk: #56617a;
-  --cizgi: #c8d1de;
-  --cizgi-acik: #dde3ec;
-  --posta: #f3c332;
-  --posta-acik: #fbeeb8;
-  --onay: #2a7553;
-  --hata: #a8342c;
+  --kagit: #f8fafc;
+  --yuzey: #ffffff;
+  --murekkep: #0a0a0a;
+  --soluk: #64748b;
+  --cizgi: #e2e8f0;
+  --cizgi-acik: #f1f5f9;
+  --posta: #10b981;
+  --posta-acik: #d1fae5;
+  --onay: #047857;
+  --hata: #dc2626;
   --f-ui: 'Adventor', 'Century Gothic', 'Avenir Next', sans-serif;
   --f-metin: 'Schola', 'Century Schoolbook', Georgia, serif;
 
@@ -66,14 +66,15 @@
 .hz-btn:hover { box-shadow: 3px 3px 0 var(--murekkep); transform: translate(-1px, -1px); }
 .hz-btn:active { box-shadow: none; transform: none; }
 .hz-btn[disabled] { opacity: .45; cursor: not-allowed; box-shadow: none; transform: none; }
-.hz-btn-posta { background: var(--posta); }
+.hz-btn-posta { background: var(--murekkep); color: #fff; }
+.hz-btn-posta:hover { box-shadow: 3px 3px 0 var(--posta); }
 .hz-btn-murekkep { background: var(--murekkep); color: var(--yuzey); }
 .hz-btn-sm { min-height: 36px; padding: 0 14px; font-size: 14px; }
 .hz-link { font-family: var(--f-ui); font-size: 15px; background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; text-decoration-thickness: 1px; color: var(--murekkep); }
 .hz-link:hover { text-decoration-thickness: 2px; }
 
 /* ---- Kâğıt yüzeyi -------------------------------------------------------- */
-.hz-sheet { background: var(--yuzey); border: 1px solid var(--cizgi); border-radius: 4px; box-shadow: 0 1px 0 var(--cizgi), 0 18px 40px -28px rgba(26, 39, 68, .35); }
+.hz-sheet { background: var(--yuzey); border: 1px solid var(--cizgi); border-radius: 4px; box-shadow: 0 1px 0 var(--cizgi), 0 18px 40px -28px rgba(15, 23, 42, .25); }
 .hz-pad { padding: clamp(22px, 4vw, 40px); }
 
 /* ---- Form ---------------------------------------------------------------- */
@@ -86,9 +87,9 @@
 .hz-notice { border-left: 4px solid var(--hata); background: #fff; padding: 12px 16px; font-size: 15px; }
 
 .hz-chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.hz-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 6px 5px 12px; background: var(--posta-acik); border: 1px solid #e5cf7a; border-radius: 3px; font-family: var(--f-ui); font-size: 14px; }
+.hz-chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 6px 5px 12px; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 3px; font-family: var(--f-ui); font-size: 14px; }
 .hz-chip button { border: 0; background: transparent; width: 22px; height: 22px; display: grid; place-items: center; cursor: pointer; border-radius: 2px; font-size: 16px; line-height: 1; }
-.hz-chip button:hover { background: rgba(26,39,68,.1); }
+.hz-chip button:hover { background: rgba(10,10,10,.08); }
 .hz-chip-plain { background: transparent; border-color: var(--cizgi); padding-right: 12px; }
 
 .hz-toggle-row { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -116,7 +117,7 @@
 .hz-foot a { color: var(--soluk); }
 
 /* CV kâğıdı çizimi */
-.hz-art-cv { width: 168px; height: 212px; background: #fff; border: 1px solid var(--cizgi); box-shadow: 0 14px 30px -18px rgba(26,39,68,.45); transform: rotate(-3deg) translateY(18px); padding: 18px 16px; display: grid; align-content: start; gap: 7px; }
+.hz-art-cv { width: 168px; height: 212px; background: #fff; border: 1px solid var(--cizgi); box-shadow: 0 14px 30px -18px rgba(15,23,42,.35); transform: rotate(-3deg) translateY(18px); padding: 18px 16px; display: grid; align-content: start; gap: 7px; }
 .hz-art-cv i { display: block; height: 6px; background: var(--cizgi-acik); border-radius: 1px; }
 .hz-art-cv i.t { height: 10px; width: 60%; background: var(--murekkep); }
 .hz-art-cv i.m { background: linear-gradient(90deg, var(--posta) 0 70%, var(--cizgi-acik) 70%); }
@@ -144,8 +145,9 @@
 .hz-count { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--murekkep); color: var(--yuzey); font-size: 12px; font-weight: 700; display: inline-grid; place-items: center; }
 
 .hz-callout { display: grid; grid-template-columns: 1fr auto; gap: 18px 28px; align-items: center; padding: 22px 26px; background: var(--murekkep); color: var(--yuzey); border-radius: 4px; margin-bottom: 28px; }
-.hz-callout p { color: #c3cbdb; font-size: 16px; }
-.hz-callout .hz-btn { border-color: var(--posta); }
+.hz-callout p { color: #cbd5e1; font-size: 16px; }
+.hz-callout .hz-btn { background: #fff; color: var(--murekkep); border-color: #fff; }
+.hz-callout .hz-btn:hover { box-shadow: 3px 3px 0 var(--posta); }
 @media (max-width: 640px) { .hz-callout { grid-template-columns: 1fr; } }
 
 .hz-letters { list-style: none; padding: 0; }
@@ -153,7 +155,7 @@
 .hz-letter:last-child { border-bottom: 0; }
 .hz-letter h3 { font-family: var(--f-ui); font-weight: 700; font-size: 17px; }
 .hz-letter time { font-family: var(--f-ui); font-size: 13px; color: var(--soluk); white-space: nowrap; }
-.hz-letter p { grid-column: 1 / -1; color: #33405e; max-width: 62ch; }
+.hz-letter p { grid-column: 1 / -1; color: #334155; max-width: 62ch; }
 .hz-letter[data-unread]::before { content: ''; position: absolute; left: 0; top: 22px; bottom: 22px; width: 4px; background: var(--posta); }
 
 .hz-empty { padding: 48px 26px; display: grid; gap: 10px; justify-items: start; }
@@ -198,7 +200,7 @@
 .hz-mode p { font-size: 15px; color: var(--soluk); }
 .hz-mode:has(input:checked) { border-color: var(--murekkep); box-shadow: inset 0 0 0 1px var(--murekkep); }
 .hz-mode:has(input:focus-visible) { outline: 3px solid var(--murekkep); outline-offset: 2px; }
-.hz-mode em { font-style: normal; font-family: var(--f-ui); font-size: 12px; font-weight: 700; justify-self: start; padding: 2px 8px; background: var(--posta); border-radius: 2px; }
+.hz-mode em { font-style: normal; font-family: var(--f-ui); font-size: 12px; font-weight: 700; justify-self: start; padding: 2px 8px; background: var(--posta-acik); color: var(--onay); border-radius: 2px; }
 
 .hz-stepper { display: inline-flex; align-items: stretch; border: 1.5px solid var(--cizgi); border-radius: 3px; background: #fff; }
 .hz-stepper button { width: 44px; border: 0; background: transparent; cursor: pointer; font-size: 20px; }
