@@ -24,6 +24,7 @@ export function createApp({ config, llm, logger, budget, semaphore, limiters, su
     heavy: createRateLimiter({ windowMs: HOUR, max: 20 }), // full pipelines, OCR, reports
     chat: createRateLimiter({ windowMs: HOUR, max: 150 }), // interview turns, editor assists
     automation: createRateLimiter({ windowMs: HOUR, max: 600 }), // signed-in panel
+    automationAi: createRateLimiter({ windowMs: HOUR, max: 30 }), // CV analysis, role suggestions
   };
 
   const app = express();
@@ -38,7 +39,10 @@ export function createApp({ config, llm, logger, budget, semaphore, limiters, su
     supabase ||
     (config.automationEnabled ? createSupabase({ url: config.SUPABASE_URL, serviceKey: config.SUPABASE_SERVICE_ROLE_KEY }) : null);
   if (db) {
-    app.use('/api/v1/automation', automationRouter({ supabase: db, limiter: lim.automation || lim.chat }));
+    app.use(
+      '/api/v1/automation',
+      automationRouter({ supabase: db, limiter: lim.automation || lim.chat, heavyLimiter: lim.automationAi || lim.heavy, llm, budget: deps.budget }),
+    );
   } else {
     app.use('/api/v1/automation', (req, res, next) => next(Errors.notConfigured()));
   }

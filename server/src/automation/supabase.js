@@ -6,7 +6,7 @@ import { Errors } from '../lib/errors.js';
 export function createSupabase({ url, serviceKey, fetchImpl = fetch, timeoutMs = 10_000 }) {
   const base = url.replace(/\/$/, '');
 
-  async function call(path, { method = 'GET', headers = {}, body, auth } = {}) {
+  async function call(path, { method = 'GET', headers = {}, body, auth, raw } = {}) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     try {
@@ -15,10 +15,10 @@ export function createSupabase({ url, serviceKey, fetchImpl = fetch, timeoutMs =
         headers: {
           apikey: serviceKey,
           Authorization: `Bearer ${auth || serviceKey}`,
-          ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+          ...(body !== undefined && !raw ? { 'Content-Type': 'application/json' } : {}),
           ...headers,
         },
-        body: body !== undefined ? JSON.stringify(body) : undefined,
+        body: raw ? body : body !== undefined ? JSON.stringify(body) : undefined,
         signal: ctrl.signal,
       });
       const text = await res.text();
@@ -52,5 +52,21 @@ export function createSupabase({ url, serviceKey, fetchImpl = fetch, timeoutMs =
       }),
     update: (table, query, patch) =>
       rest(`${table}?${query}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: patch }),
+    remove: (table, query) => rest(`${table}?${query}`, { method: 'DELETE', headers: { Prefer: 'return=representation' } }),
+
+    /** Uploads a private file to Storage (path is relative to the bucket). */
+    async upload(bucket, path, bytes, contentType) {
+      const r = await call(`/storage/v1/object/${bucket}/${path}`, {
+        method: 'POST',
+        raw: true,
+        headers: { 'Content-Type': contentType, 'x-upsert': 'true' },
+        body: bytes,
+      });
+      if (!r.ok) throw Errors.upstream('Dosya yüklenemedi. Lütfen tekrar deneyin.', { status: r.status });
+    },
+    async removeFiles(bucket, paths) {
+      if (!paths.length) return;
+      await call(`/storage/v1/object/${bucket}`, { method: 'DELETE', body: { prefixes: paths } });
+    },
   };
 }

@@ -65,6 +65,22 @@ function parseCv(cv) {
 const respond = (obj) => JSON.stringify(obj);
 
 const handlers = {
+  extract_profile(text) {
+    const cv = between(text, 'cv');
+    const p = parseCv(cv);
+    const skills = SKILLS.filter((s) => hasTerm(cv, s)).slice(0, 20);
+    return respond({
+      full_name: p.name || '', headline: 'Aday', seniority: 'junior', years_experience: 1, city: '',
+      roles_held: [], skills, education: [], languages: skills.filter((s) => /ingilizce|english/i.test(s)), summary: 'Mock profil.',
+    });
+  },
+
+  suggest_roles(text) {
+    const chosen = between(text, 'roles').split('\n').map((s) => s.trim().toLowerCase());
+    const pool = ['İş Analisti', 'Business Analyst', 'Ürün Analisti', 'ERP Danışmanı', 'Proje Asistanı', 'Süreç Analisti'];
+    return respond({ suggestions: pool.filter((t) => !chosen.includes(t.toLowerCase())).slice(0, 4).map((title) => ({ title, reason: 'Profiline uygun.' })) });
+  },
+
   classify_document(text) {
     const cv = between(text, 'cv');
     const signals = [/@/, /deneyim|experience/i, /eğitim|education/i, /\+?\d[\d\s]{8,}/].filter((r) => r.test(cv)).length;

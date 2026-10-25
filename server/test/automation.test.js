@@ -10,7 +10,8 @@ import { requireUser } from '../src/automation/auth.js';
 const USERS = { 'tok-a': { id: '11111111-1111-4111-8111-111111111111', email: 'a@x.com', user_metadata: { full_name: 'Ayşe' } } };
 
 function fakeSupabase() {
-  const db = { profiles: [], inbox_items: [] };
+  const db = { profiles: [], inbox_items: [], cvs: [], targets: [] };
+  const files = new Map();
   const where = (rows, q) => {
     const p = new URLSearchParams(q);
     return rows.filter((r) =>
@@ -28,8 +29,9 @@ function fakeSupabase() {
     db,
     getUser: async (t) => USERS[t] || null,
     select: async (t, q) => where(db[t], q),
-    insert: async (t, rows) => {
+    insert: async (t, rows, { upsert } = {}) => {
       const out = rows.map((r) => ({ id: r.id || `id-${++n}`, read_at: null, created_at: new Date().toISOString(), ...r }));
+      if (upsert && t === 'targets') db[t] = db[t].filter((x) => !out.some((o) => o.user_id === x.user_id));
       db[t].push(...out);
       return out;
     },
@@ -38,6 +40,14 @@ function fakeSupabase() {
       hit.forEach((r) => Object.assign(r, patch));
       return hit;
     },
+    remove: async (t, q) => {
+      const hit = where(db[t], q);
+      db[t] = db[t].filter((r) => !hit.includes(r));
+      return hit;
+    },
+    upload: async (b, path, bytes) => void files.set(path, bytes),
+    removeFiles: async (b, paths) => paths.forEach((p) => files.delete(p)),
+    files,
   };
 }
 
@@ -88,7 +98,7 @@ test('inbox is scoped to the user and can be marked read', async () => {
 });
 
 test('PATCH /me validates input and records KVKK consent', async () => {
-  assert.equal((await call('/me', { token: 'tok-a', method: 'PATCH', body: { mode: 'auto' } })).status, 400);
+  assert.equal((await call('/me', { token: 'tok-a', method: 'PATCH', body: { status: 'active' } })).status, 400);
   const j = await (await call('/me', { token: 'tok-a', method: 'PATCH', body: { kvkk_accepted: true } })).json();
   assert.ok(j.profile.kvkk_accepted_at);
 });
@@ -119,4 +129,73 @@ test('auth cache avoids repeat lookups until expiry', async () => {
   t = 2000;
   await new Promise((r) => mw(req, {}, r));
   assert.equal(calls, 2);
+});
+
+// ---- Faz 1: kurulum sihirbazı ----------------------------------------------
+const CV_TEXT = `Ayşe Yılmaz
+ayse@example.com +90 555 111 22 33
+Deneyim
+İş Analisti Stajyeri, Örnek A.Ş. 2025
+SQL ve Jira ile gereksinim analizi yaptım.
+Eğitim
+Bilişim Sistemleri Mühendisliği, Sakarya Üniversitesi 2026
+Yetenekler
+SQL, Jira, Scrum, Excel, İngilizce`.padEnd(400, ' ');
+const PDF_B64 = Buffer.from('%PDF-1.4\n' + 'x'.repeat(200)).toString('base64');
+
+test('CV upload validates, analyses and stores the file', async () => {
+  const bad = await call('/cvs', { token: 'tok-a', method: 'POST', body: { label: 'Ana', fileBase64: Buffer.from('hello'.repeat(40)).toString('base64'), text: CV_TEXT } });
+  assert.equal(bad.status, 400);
+  const r = await call('/cvs', { token: 'tok-a', method: 'POST', body: { label: 'Ana CV', fileBase64: PDF_B64, text: CV_TEXT } });
+  assert.equal(r.status, 201);
+  const { cv } = await r.json();
+  assert.equal(cv.is_default, true);
+  assert.ok(cv.extracted_profile.skills.includes('SQL'));
+  assert.equal(cv.extracted_profile.source_text, undefined);
+  assert.equal(sb.files.size, 1);
+  const second = await (await call('/cvs', { token: 'tok-a', method: 'POST', body: { label: 'İngilizce', fileBase64: PDF_B64, text: CV_TEXT } })).json();
+  assert.equal(second.cv.is_default, false);
+});
+
+test('non-CV text is rejected before storing anything', async () => {
+  const before = sb.files.size;
+  const r = await call('/cvs', { token: 'tok-a', method: 'POST', body: { label: 'Fatura', fileBase64: PDF_B64, text: 'Fatura toplam tutar KDV '.repeat(20) } });
+  assert.equal(r.status, 422);
+  assert.equal(sb.files.size, before);
+});
+
+test('default CV can be switched and deleting it promotes another', async () => {
+  const { cvs } = await (await call('/setup', { token: 'tok-a' })).json();
+  assert.equal(cvs.length, 2);
+  const other = cvs.find((c) => !c.is_default);
+  const sw = await (await call(`/cvs/${encodeURIComponent(other.id)}`, { token: 'tok-a', method: 'PATCH', body: { is_default: true } })).json();
+  assert.equal(sw.cvs.filter((c) => c.is_default).length, 1);
+  assert.equal(sw.cvs.find((c) => c.is_default).id, other.id);
+});
+
+test('role suggestions exclude roles already chosen', async () => {
+  const r = await call('/roles/suggest', { token: 'tok-a', method: 'POST', body: { roles: ['İş Analisti'] } });
+  assert.equal(r.status, 200);
+  const { suggestions } = await r.json();
+  assert.ok(suggestions.length > 0);
+  assert.ok(!suggestions.some((s) => s.title === 'İş Analisti'));
+});
+
+test('targets are validated and upserted', async () => {
+  const empty = await call('/targets', { token: 'tok-a', method: 'PUT', body: { roles: [], excluded: [], cities: [], work_modes: ['remote'], seniority: ['junior'], long_term_internship: true } });
+  assert.equal(empty.status, 400);
+  const body = { roles: ['İş Analisti', 'İş Analisti', 'ERP Danışmanı'], excluded: ['Odoo'], cities: ['Eskişehir'], work_modes: ['remote', 'hybrid'], seniority: ['junior'], long_term_internship: true };
+  const r = await (await call('/targets', { token: 'tok-a', method: 'PUT', body })).json();
+  assert.deepEqual(r.targets.roles, ['İş Analisti', 'ERP Danışmanı']);
+  await call('/targets', { token: 'tok-a', method: 'PUT', body: { ...body, cities: ['İstanbul'] } });
+  assert.equal(sb.db.targets.length, 1);
+  assert.deepEqual(sb.db.targets[0].cities, ['İstanbul']);
+});
+
+test('preferences accept valid values and reject out-of-range ones', async () => {
+  assert.equal((await call('/me', { token: 'tok-a', method: 'PATCH', body: { daily_limit: 99 } })).status, 400);
+  assert.equal((await call('/me', { token: 'tok-a', method: 'PATCH', body: { portfolio_url: 'not a url' } })).status, 400);
+  const j = await (await call('/me', { token: 'tok-a', method: 'PATCH', body: { mode: 'approval', daily_limit: 8, portfolio_url: 'https://behance.net/ayse', setup_step: 5 } })).json();
+  assert.equal(j.profile.daily_limit, 8);
+  assert.equal(j.profile.setup_step, 5);
 });

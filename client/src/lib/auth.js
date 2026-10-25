@@ -46,6 +46,13 @@ export async function signInWithGoogle() {
   window.location.assign(`${URL_}/auth/v1/authorize?${p}`);
 }
 
+/** Google Identity Services jetonunu Supabase oturumuna çevirir. */
+export async function signInWithIdToken({ idToken, nonce }) {
+  const s = await tokenRequest('id_token', { provider: 'google', id_token: idToken, nonce });
+  save(s);
+  return s;
+}
+
 /** Google dönüşünü (?code=…) oturuma çevirir. Dönüş yoksa null döner. */
 export async function completeRedirect() {
   const q = new URLSearchParams(window.location.search);
