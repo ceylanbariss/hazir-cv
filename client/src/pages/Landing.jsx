@@ -1,37 +1,56 @@
-// Açılış ekranı: iki yol — tek bir ilana CV hazırlamak ya da her gün çalışan başvuru asistanı.
+// Açılış: kahraman → kaydırdıkça akan anlatım → iki yol (tek ilana CV ya da başvuru asistanı).
 import React from 'react';
 import { navigate } from '../router.js';
 import { Shell, TopBar, Footer, CvSheetArt, EnvelopeArt } from '../hz/ui.jsx';
+import Scrolly from './landing/Scrolly.jsx';
 
 export default function Landing() {
   return (
     <Shell>
       <TopBar>
+        <button type="button" className="hz-link hz-wide-only" onClick={() => navigate('/cv')}>Tek ilana CV hazırla</button>
         <button type="button" className="hz-link" onClick={() => navigate('/otomasyon')}>Hesabına gir</button>
       </TopBar>
-      <main className="hz-wrap">
-        <section className="hz-hero">
-          <h1 className="hz-display" style={{ maxWidth: '15ch' }}>Bugün ne yapmak istiyorsun?</h1>
-          <p className="hz-lead">Tek bir ilana göre CV'ni hazırlayabilir ya da her gün sana uygun ilanları bulup başvuruları hazırlayan asistanı kurabilirsin.</p>
+      <main>
+        <section className="hz-wrap hz-hero" style={{ minHeight: 'min(78vh, 720px)', alignContent: 'center' }}>
+          <div>
+            <h1 className="hz-display" style={{ maxWidth: '13ch' }}>Her gün öğlen, başvuruların hazır.</h1>
+            <span className="hz-scroll-hint">Nasıl çalıştığını görmek için kaydır</span>
+          </div>
+          <div style={{ display: 'grid', gap: 18 }}>
+            <p className="hz-lead">Hazır CV asistanı sana uygun ilanları bulur, kendi CV'lerinden birini seçer ve ilana özel ön yazını hazırlar. Sen onaylarsın, başvuru Gmail'inden gider. Ücretsiz.</p>
+            <div className="hz-hero-cta">
+              <button type="button" className="hz-btn hz-btn-posta" onClick={() => navigate('/otomasyon')}>Asistanı kur</button>
+              <button type="button" className="hz-btn" onClick={() => navigate('/cv')}>Tek ilana CV hazırla</button>
+            </div>
+          </div>
         </section>
-        <div className="hz-choices">
-          <button type="button" className="hz-sheet hz-choice" onClick={() => navigate('/cv')}>
-            <div className="hz-choice-art"><CvSheetArt /></div>
-            <div className="hz-choice-body">
-              <h2 className="hz-h1">İlana göre CV hazırla</h2>
-              <p>CV'ni ve başvuracağın ilanı ver. İlana göre yeniden yazılmış, ATS uyumlu CV'ni, eksik ve güçlü yönlerinle birlikte al. İstersen mülakat provası yap.</p>
-              <span className="hz-btn">CV hazırla</span>
-            </div>
-          </button>
-          <button type="button" className="hz-sheet hz-choice" onClick={() => navigate('/otomasyon')}>
-            <div className="hz-choice-art"><EnvelopeArt /></div>
-            <div className="hz-choice-body">
-              <h2 className="hz-h1">Başvuru asistanını kur</h2>
-              <p>Rollerini ve şehrini bir kez seç. Asistan her gün uygun ilanları bulur, kendi CV'lerinden birini seçer, ilana özel ön yazını hazırlar ve onayınla Gmail'inden gönderir.</p>
-              <span className="hz-btn hz-btn-posta">Asistanı kur</span>
-            </div>
-          </button>
-        </div>
+
+        <Scrolly />
+
+        <section className="hz-wrap">
+          <div className="hz-section-title">
+            <h2 className="hz-display" style={{ fontSize: 'clamp(32px, 4.4vw, 52px)', maxWidth: '15ch' }}>Bugün ne yapmak istiyorsun?</h2>
+          </div>
+          <div className="hz-choices">
+            <button type="button" className="hz-sheet hz-choice" onClick={() => navigate('/cv')}>
+              <div className="hz-choice-art"><CvSheetArt /></div>
+              <div className="hz-choice-body">
+                <h3 className="hz-h1">İlana göre CV hazırla</h3>
+                <p>CV'ni ve başvuracağın ilanı ver. İlana göre yeniden yazılmış, ATS uyumlu CV'ni, eksik ve güçlü yönlerinle birlikte al. İstersen mülakat provası yap.</p>
+                <span className="hz-btn">CV hazırla</span>
+              </div>
+            </button>
+            <button type="button" className="hz-sheet hz-choice" onClick={() => navigate('/otomasyon')}>
+              <div className="hz-choice-art"><EnvelopeArt /></div>
+              <div className="hz-choice-body">
+                <h3 className="hz-h1">Başvuru asistanını kur</h3>
+                <p>Rollerini ve şehrini bir kez seç. Asistan her gün uygun ilanları bulur, kendi CV'lerinden birini seçer, ilana özel ön yazını hazırlar ve onayınla Gmail'inden gönderir.</p>
+                <span className="hz-btn hz-btn-posta">Asistanı kur</span>
+              </div>
+            </button>
+          </div>
+        </section>
       </main>
       <Footer />
     </Shell>
