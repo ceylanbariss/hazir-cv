@@ -199,3 +199,26 @@ test('preferences accept valid values and reject out-of-range ones', async () =>
   assert.equal(j.profile.daily_limit, 8);
   assert.equal(j.profile.setup_step, 5);
 });
+
+test('CV is still saved when the AI service is unavailable', async () => {
+  const { createApp: mk } = await import('../src/app.js');
+  const sb2 = fakeSupabase();
+  const failing = { name: 'x', model: 'x', generate: async () => { const { Errors } = await import('../src/lib/errors.js'); throw Errors.upstream(); } };
+  const app = mk({ config: loadConfig({ LLM_PROVIDER: 'mock', NODE_ENV: 'test' }), llm: failing, logger: createLogger('silent'), supabase: sb2 });
+  const s = await new Promise((r) => { const x = app.listen(0, () => r(x)); });
+  const r = await fetch(`http://127.0.0.1:${s.address().port}/api/v1/automation/cvs`, {
+    method: 'POST', headers: { Authorization: 'Bearer tok-a', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label: 'Ana', fileBase64: PDF_B64, text: CV_TEXT }),
+  });
+  s.close();
+  assert.equal(r.status, 201);
+  const { cv } = await r.json();
+  assert.equal(cv.extracted_profile.pending, true);
+  assert.equal(sb2.files.size, 1);
+});
+
+test('CORS preflight allows PUT and DELETE for the panel', async () => {
+  const r = await fetch(base + '/targets', { method: 'OPTIONS', headers: { Origin: 'https://www.hazircv.com.tr', 'Access-Control-Request-Method': 'PUT', 'Access-Control-Request-Headers': 'authorization,content-type' } });
+  assert.match(r.headers.get('access-control-allow-methods') || '', /PUT/);
+  assert.match(r.headers.get('access-control-allow-methods') || '', /DELETE/);
+});
