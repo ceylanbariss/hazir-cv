@@ -1,13 +1,16 @@
 // /api/v1/automation — başvuru otomasyonu modülü.
 // Faz 0: hesap + gelen kutusu. Faz 1: kurulum sihirbazı (CV, roller, konum, tercihler).
+// Faz 2: Gmail bağlantısı, günlük işçi (onaylı mod), onay bekleyen başvurular ve gönderim.
 import express from 'express';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod/v4';
-import { Errors } from '../lib/errors.js';
+import { Errors, AppError } from '../lib/errors.js';
 import { rateLimit } from '../lib/guards.js';
 import { requireUser } from '../automation/auth.js';
 import { runTask } from '../llm/runTask.js';
 import * as P from '../automation/prompts.js';
+import { buildMime } from '../automation/gmail.js';
+import { runForUser, listDueUsers, dayStart } from '../automation/worker.js';
 
 const uid = (req) => encodeURIComponent(req.user.id);
 const MAX_CVS = 3;
@@ -62,10 +65,78 @@ const parse = (schema, body) => {
   return r.data;
 };
 
-export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget }) {
+const AppPatch = z
+  .object({
+    subject: text(150).optional(),
+    cover_letter: text(3000).optional(),
+    status: z.enum(['skipped', 'pending_approval']).optional(),
+  })
+  .strict();
+const APP_STATUSES = ['pending_approval', 'skipped', 'sent', 'failed', 'replied', 'interview', 'rejected'];
+const APP_FIELDS = 'id,company,position,recipient,source_url,kind,score,reason,cover_letter,subject,cv_id,status,error,created_at,sent_at';
+
+const secretMatches = (given, expected) => {
+  if (!expected || !given) return false;
+  const a = Buffer.from(String(given));
+  const b = Buffer.from(String(expected));
+  return a.length === b.length && timingSafeEqual(a, b);
+};
+
+const pdfName = (fullName) => `${(fullName || 'CV').trim().replace(/\s+/g, '_')}_CV.pdf`;
+
+export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget, config = {}, gmail = null, sealer = null, search = null, readPage = null }) {
   const router = express.Router();
   const json = express.json({ limit: '50kb' });
   const jsonUpload = express.json({ limit: '8mb' });
+  const running = new Set(); // aynı kullanıcı için eşzamanlı işçi çalışmasın
+  const workerReady = Boolean(search?.enabled && readPage);
+
+  async function runWorker(userId, log, opts = {}) {
+    if (running.has(userId)) return { status: 'skipped', reason: 'already_running' };
+    running.add(userId);
+    try {
+      return await runForUser({ supabase, llm, budget, search, readPage, log, config, userId, ...opts });
+    } finally {
+      running.delete(userId);
+    }
+  }
+
+  // ---- Herkese açık uçlar (oturum gerektirmez) -----------------------------------
+  // Google OAuth dönüşü: kodu refresh token ile değiştirir, şifreleyip saklar, panele döner.
+  router.get('/gmail/callback', rateLimit(limiter, 'automation'), async (req, res) => {
+    const back = (status) => res.redirect(302, `${config.APP_URL || ''}/otomasyon?gmail=${status}`);
+    if (!gmail || !sealer) return back('unavailable');
+    const state = sealer.verify(req.query.state);
+    if (!state?.uid) return back('expired');
+    if (req.query.error || !req.query.code) return back('denied');
+    try {
+      const t = await gmail.exchangeCode(String(req.query.code));
+      if (!t.scopes.includes('gmail.send')) return back('scope');
+      if (!t.refreshToken) return back('error');
+      await supabase.insert(
+        'gmail_connections',
+        [{ user_id: state.uid, google_email: t.email || state.email, refresh_token_enc: sealer.encrypt(t.refreshToken), scopes: t.scopes, connected_at: new Date().toISOString() }],
+        { upsert: true, onConflict: 'user_id' },
+      );
+      await supabase.insert('inbox_items', [{ user_id: state.uid, kind: 'system', title: 'Gmail bağlandı', body: `Onayladığın başvurular ${t.email || 'Gmail adresinden'} gönderilecek. Bağlantıyı Ayarlar sekmesinden istediğin an kaldırabilirsin.` }]);
+      back('ok');
+    } catch (err) {
+      req.log.warn('gmail_callback_failed', { code: err.code, details: err.details });
+      back('error');
+    }
+  });
+
+  // GitHub Actions günlük tetikleyicisi: önce kullanıcı listesini alır, sonra her kullanıcı için ayrı çağırır.
+  const cronOnly = (req, res, next) => (secretMatches(req.get('x-cron-secret'), config.CRON_SECRET) ? next() : next(Errors.notFound()));
+  router.post('/internal/users', cronOnly, async (req, res) => {
+    res.json({ users: workerReady ? await listDueUsers(supabase) : [], workerReady });
+  });
+  router.post('/internal/run/:userId', cronOnly, async (req, res) => {
+    const userId = z.uuid().parse(req.params.userId);
+    if (!workerReady) throw Errors.notConfigured();
+    res.json(await runWorker(userId, req.log));
+  });
+
   router.use(rateLimit(limiter, 'automation'), requireUser(supabase));
   const heavy = heavyLimiter ? rateLimit(heavyLimiter, 'automation_ai') : (req, res, next) => next();
   const ctxFor = (req) => ({ llm, budget, log: req.log, trace: [] });
@@ -186,6 +257,92 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget 
       onConflict: 'user_id',
     });
     res.json({ targets });
+  });
+
+  // ---- Gmail bağlantısı -------------------------------------------------------
+  router.get('/gmail', async (req, res) => {
+    const [conn] = await supabase.select('gmail_connections', `user_id=eq.${uid(req)}&select=google_email,connected_at`);
+    res.json({ available: Boolean(gmail && sealer), connected: Boolean(conn), email: conn?.google_email || null, connectedAt: conn?.connected_at || null });
+  });
+
+  router.post('/gmail/connect', async (req, res) => {
+    if (!gmail || !sealer) throw Errors.notConfigured();
+    await ensureProfile(req);
+    const state = sealer.sign({ uid: req.user.id, email: req.user.email });
+    res.json({ url: gmail.authUrl({ state, loginHint: req.user.email }) });
+  });
+
+  router.delete('/gmail', async (req, res) => {
+    const [conn] = await supabase.remove('gmail_connections', `user_id=eq.${uid(req)}`);
+    if (conn && gmail && sealer) {
+      try { await gmail.revoke(sealer.decrypt(conn.refresh_token_enc)); } catch { /* bağlantı zaten silindi */ }
+    }
+    res.json({ connected: false });
+  });
+
+  // ---- Başvurular ---------------------------------------------------------------
+  router.get('/applications', async (req, res) => {
+    const status = String(req.query.status || '');
+    const statuses = status.split(',').filter((x) => APP_STATUSES.includes(x));
+    const filter = statuses.length ? `&status=in.(${statuses.join(',')})` : '';
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const items = await supabase.select('applications', `user_id=eq.${uid(req)}${filter}&select=${APP_FIELDS}&order=created_at.desc&limit=${limit}`);
+    const cvs = await listCvs(req);
+    const label = Object.fromEntries(cvs.map((c) => [c.id, c.label]));
+    res.json({ items: items.map((a) => ({ ...a, cv_label: label[a.cv_id] || null })) });
+  });
+
+  const ownedApp = async (req) => {
+    const id = z.uuid().parse(req.params.id);
+    const [app] = await supabase.select('applications', `id=eq.${id}&user_id=eq.${uid(req)}&select=*`);
+    if (!app) throw Errors.notFound();
+    return app;
+  };
+
+  router.patch('/applications/:id', json, async (req, res) => {
+    const data = parse(AppPatch, req.body);
+    const app = await ownedApp(req);
+    if (!['pending_approval', 'skipped', 'failed'].includes(app.status)) throw Errors.badRequest('Gönderilmiş bir başvuru düzenlenemez.');
+    const [updated] = await supabase.update('applications', `id=eq.${app.id}&user_id=eq.${uid(req)}`, data);
+    res.json({ application: updated });
+  });
+
+  router.post('/applications/:id/send', heavy, async (req, res) => {
+    if (!gmail || !sealer) throw Errors.notConfigured();
+    const app = await ownedApp(req);
+    if (!['pending_approval', 'failed'].includes(app.status)) throw Errors.badRequest('Bu başvuru zaten gönderilmiş ya da atlanmış.');
+    if (!app.recipient) throw Errors.badRequest('Bu başvurunun alıcı adresi yok.');
+    const { profile } = await ensureProfile(req);
+    const sentToday = await supabase.select('applications', `user_id=eq.${uid(req)}&status=eq.sent&sent_at=gte.${encodeURIComponent(dayStart(new Date()))}&select=id`);
+    if (sentToday.length >= profile.daily_limit) throw Errors.badRequest(`Günlük gönderim limitine (${profile.daily_limit}) ulaştın. Limiti Ayarlar'dan değiştirebilir ya da yarın gönderebilirsin.`);
+
+    const [conn] = await supabase.select('gmail_connections', `user_id=eq.${uid(req)}&select=*`);
+    if (!conn) throw new AppError('GMAIL_NOT_CONNECTED', 409, 'Göndermek için önce Gmail hesabını bağla.');
+    const cvs = await supabase.select('cvs', `user_id=eq.${uid(req)}&select=id,storage_path,is_default,extracted_profile`);
+    const cv = cvs.find((c) => c.id === app.cv_id) || cvs.find((c) => c.is_default) || cvs[0];
+    if (!cv) throw Errors.badRequest('Ekleyecek bir CV bulunamadı. Önce CV yükle.');
+    const fullName = profile.full_name || cv.extracted_profile?.full_name || '';
+
+    try {
+      const access = await gmail.accessToken(sealer.decrypt(conn.refresh_token_enc));
+      const bytes = await supabase.download('cvs', cv.storage_path);
+      const mime = buildMime({ from: conn.google_email, fromName: fullName, to: app.recipient, subject: app.subject, text: app.cover_letter, attachment: { filename: pdfName(fullName), bytes } });
+      await gmail.send(access, mime);
+    } catch (err) {
+      if (err.code === 'GMAIL_REVOKED') await supabase.remove('gmail_connections', `user_id=eq.${uid(req)}`);
+      await supabase.update('applications', `id=eq.${app.id}&user_id=eq.${uid(req)}`, { error: String(err.message).slice(0, 300) });
+      throw err;
+    }
+    const [updated] = await supabase.update('applications', `id=eq.${app.id}&user_id=eq.${uid(req)}`, { status: 'sent', sent_at: new Date().toISOString(), error: null });
+    await supabase.insert('inbox_items', [{ user_id: req.user.id, kind: 'sent', title: `Başvuru gönderildi: ${app.company}`, body: `${app.position || 'Açık başvuru'} · ${app.recipient}`, data: { application_id: app.id } }]);
+    res.json({ application: updated });
+  });
+
+  // Kullanıcının kendi taramasını elle başlatması (günde bir kez; zamanlanmış çalışmayla aynı kural).
+  router.post('/run', heavy, async (req, res) => {
+    if (!workerReady) throw Errors.notConfigured();
+    await ensureProfile(req);
+    res.json(await runWorker(req.user.id, req.log));
   });
 
   // ---- Gelen kutusu --------------------------------------------------------
