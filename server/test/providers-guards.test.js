@@ -99,14 +99,18 @@ test('boolean env values are tolerant of casing, spaces and quotes', () => {
 
 test('gemini: falls back to the next model when the primary is overloaded', async () => {
   const calls = [];
-  const fetchImpl = async (url) => {
+  const bodies = [];
+  const fetchImpl = async (url, init) => {
     calls.push(url);
+    bodies.push(JSON.parse(init.body));
     if (url.includes('primary-model')) return new Response(JSON.stringify({ error: { message: 'high demand' } }), { status: 503 });
     return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"ok":true}' }] } }], usageMetadata: { promptTokenCount: 1 } }), { status: 200 });
   };
   const g = createGeminiProvider({ ...cfg, GEMINI_MODEL: 'primary-model', GEMINI_FALLBACK_MODELS: ['backup-model'], LLM_MAX_RETRIES: 0 }, { fetchImpl });
-  const out = await g.generate({ system: 's', parts: [{ text: 'x' }] });
+  const out = await g.generate({ system: 's', parts: [{ text: 'x' }], thinkingBudget: 0 });
   assert.equal(out.model, 'backup-model');
+  assert.deepEqual(bodies[0].generationConfig.thinkingConfig, { thinkingBudget: 0 });
+  assert.equal(bodies.at(-1).generationConfig.thinkingConfig, undefined);
   assert.equal(out.fallbackFrom, 'primary-model');
   assert.ok(calls[0].includes('primary-model') && calls[1].includes('backup-model'));
 });
