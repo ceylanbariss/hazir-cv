@@ -27,7 +27,7 @@ const EnvSchema = z.object({
   GEMINI_API_KEY: z.string().optional(),
   GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
   // Asıl model yoğun/kotası dolu olduğunda sırayla denenecek yedekler ("" verilirse yedek yok).
-  GEMINI_FALLBACK_MODELS: csv('gemini-2.5-flash-lite,gemini-2.5-flash'),
+  GEMINI_FALLBACK_MODELS: csv('gemini-3.6-flash,gemini-3.8-flash,gemini-3-flash,gemini-2.5-flash-lite'),
   // "json_schema" sends a response JSON schema to Gemini; "mime_only" only asks
   // for JSON. Responses are always validated with zod either way.
   GEMINI_STRUCTURED_MODE: z.enum(['json_schema', 'mime_only']).default('json_schema'),
