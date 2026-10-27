@@ -5,6 +5,30 @@ import { Spinner } from '../../hz/ui.jsx';
 
 const fmt = (iso) => new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
 const KIND = { job: 'İlan', open_application: 'Açık başvuru' };
+/** "https://www.firma.com.tr/kariyer/ilan-1" → "firma.com.tr/kariyer/ilan-1" (kısaltılmış) */
+const shortUrl = (url) => {
+  try {
+    const u = new URL(url);
+    const path = decodeURIComponent(u.pathname).replace(/\/$/, '');
+    const full = u.hostname.replace(/^www\./, '') + path;
+    return full.length > 60 ? `${full.slice(0, 57)}…` : full;
+  } catch {
+    return url;
+  }
+};
+
+/** İlanın bulunduğu sayfa: her kartta tıklanabilir, belirgin bir bağlantı. */
+function SourceLink({ url }) {
+  if (!url) return null;
+  return (
+    <a className="hz-source" href={url} target="_blank" rel="noreferrer noopener" title={url}>
+      <span className="hz-source-label">Kaynak</span>
+      <span className="hz-source-url">{shortUrl(url)}</span>
+      <span aria-hidden="true">↗</span>
+    </a>
+  );
+}
+
 const STATUS = { sent: 'Gönderildi', skipped: 'Atlandı', failed: 'Gönderilemedi', replied: 'Dönüş geldi', interview: 'Mülakat', rejected: 'Olumsuz' };
 
 // ---- Gmail -------------------------------------------------------------------
@@ -114,10 +138,10 @@ function PendingItem({ app, gmailConnected, onChange, onConnect }) {
         <span className="hz-score" data-kind={app.kind} title="Uygunluk puanı">{app.score ?? '–'}</span>
         <p>
           {KIND[app.kind] || 'Başvuru'} · {app.recipient}
-          {app.source_url && <> · <a href={app.source_url} target="_blank" rel="noreferrer noopener">Sayfayı aç</a></>}
           {app.cv_label && <> · CV: {app.cv_label}</>}
         </p>
       </div>
+      <SourceLink url={app.source_url} />
       {app.reason && <p className="hz-reason">{app.reason}</p>}
       {edit ? (
         <div style={{ display: 'grid', gap: 10 }}>
@@ -214,8 +238,9 @@ export function SentView() {
           <div className="hz-app-head">
             <h3>{a.company}{a.position ? ` · ${a.position}` : ''}</h3>
             <span className="hz-meta">{STATUS[a.status] || a.status}</span>
-            <p>{a.recipient} · {fmt(a.sent_at || a.created_at)}{a.source_url && <> · <a href={a.source_url} target="_blank" rel="noreferrer noopener">Sayfa</a></>}</p>
+            <p>{a.recipient} · {fmt(a.sent_at || a.created_at)}</p>
           </div>
+          <SourceLink url={a.source_url} />
         </li>
       ))}
     </ul>
