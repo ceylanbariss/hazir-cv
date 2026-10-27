@@ -1,0 +1,43 @@
+# Başvuru otomasyonu günlük işçisi: her sabah Render'daki sunucuyu uyandırır ve
+# kurulumu tamamlamış her kullanıcı için taramayı sırayla çalıştırır (onaylı mod:
+# hiçbir e-posta otomatik gönderilmez, yalnızca onay bekleyen taslaklar hazırlanır).
+# Gerekli repo sırrı: CRON_SECRET (Render'daki CRON_SECRET ile aynı değer).
+name: Otomasyon günlük tarama
+
+on:
+  schedule:
+    - cron: '17 6 * * *' # 06:17 UTC = 09:17 Türkiye
+  workflow_dispatch:
+
+concurrency:
+  group: otomasyon-gunluk
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      API: https://resumatch-backend-zsmt.onrender.com/api/v1/automation
+      CRON_SECRET: ${{ secrets.CRON_SECRET }}
+    steps:
+      - name: Sunucuyu uyandır
+        run: |
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS --max-time 60 https://resumatch-backend-zsmt.onrender.com/api/v1/health > /dev/null; then echo "hazır"; exit 0; fi
+            echo "bekleniyor ($i)"; sleep 20
+          done
+          exit 1
+      - name: Kullanıcılar için tarama
+        run: |
+          set -euo pipefail
+          if [ -z "$CRON_SECRET" ]; then echo "CRON_SECRET sırrı tanımlı değil"; exit 1; fi
+          users=$(curl -fsS --max-time 60 -X POST -H "x-cron-secret: $CRON_SECRET" "$API/internal/users" | jq -r '.users[]')
+          count=0
+          for u in $users; do
+            count=$((count+1))
+            echo "::group::Kullanıcı $count"
+            curl -sS --max-time 600 -X POST -H "x-cron-secret: $CRON_SECRET" "$API/internal/run/$u" | jq -c '{status, reason, searches, pages, evaluated, drafted, errors}' || echo "hata"
+            echo "::endgroup::"
+          done
+          echo "Toplam $count kullanıcı işlendi."
