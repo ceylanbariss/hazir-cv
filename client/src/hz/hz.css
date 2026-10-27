@@ -329,3 +329,27 @@
   .px-static li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 24px; align-items: center; }
   .px-static img { width: 100%; border-radius: 4px; }
 }
+
+/* ---- Faz 2: başvurular ----------------------------------------------------- */
+.hz-apps { list-style: none; padding: 0; }
+.hz-app { display: grid; gap: 12px; padding: 22px 26px; border-top: 1px solid var(--cizgi-acik); }
+.hz-app:first-child { border-top: 0; }
+.hz-app-head { display: grid; grid-template-columns: 1fr auto; gap: 4px 18px; align-items: start; }
+.hz-app-head h3 { font-family: var(--f-ui); font-weight: 700; font-size: 17px; }
+.hz-app-head p { font-size: 15px; color: var(--soluk); grid-column: 1; }
+.hz-app-head a { color: inherit; }
+.hz-score { font-family: var(--f-ui); font-weight: 700; font-size: 15px; padding: 4px 10px; border: 1.5px solid var(--murekkep); border-radius: 3px; background: var(--posta-acik); white-space: nowrap; }
+.hz-score[data-kind='open_application'] { background: #fff; }
+.hz-reason { font-size: 15px; color: #334155; }
+.hz-letter-text { white-space: pre-wrap; font-size: 15.5px; line-height: 1.6; padding: 14px 16px; background: var(--kagit); border: 1px solid var(--cizgi); border-radius: 3px; }
+.hz-textarea { width: 100%; min-height: 220px; padding: 12px 14px; background: #fff; border: 1.5px solid var(--cizgi); border-radius: 3px; font-size: 15.5px; line-height: 1.6; resize: vertical; }
+.hz-textarea:focus, .hz-app .hz-input:focus { outline: none; border-color: var(--murekkep); box-shadow: 0 0 0 3px var(--posta-acik); }
+.hz-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.hz-meta { font-family: var(--f-ui); font-size: 13px; color: var(--soluk); }
+.hz-ok { border-left: 4px solid var(--posta); background: #fff; padding: 12px 16px; font-size: 15px; }
+.hz-settings { display: grid; gap: 22px; padding: 22px 26px 30px; }
+.hz-settings section { display: grid; gap: 10px; padding-bottom: 22px; border-bottom: 1px solid var(--cizgi-acik); }
+.hz-settings section:last-child { border-bottom: 0; }
+.hz-status { display: inline-flex; align-items: center; gap: 8px; font-family: var(--f-ui); font-size: 15px; }
+.hz-status::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--cizgi); }
+.hz-status[data-on]::before { background: var(--posta); }
