@@ -39,19 +39,22 @@ export function createGeminiProvider(config, { fetchImpl = fetch } = {}) {
    * @param {number} [req.thinkingBudget]
    */
   async function generate(req) {
-    let lastErr;
+    const tried = []; // her modelin neden başarısız olduğu, kayıtlarda görünsün diye
     for (const [i, model] of MODELS.entries()) {
       try {
         const out = await generateWith(model, req);
-        return i ? { ...out, fallbackFrom: GEMINI_MODEL } : out;
+        return i ? { ...out, fallbackFrom: GEMINI_MODEL, tried } : out;
       } catch (err) {
-        lastErr = err;
         const d = err.details || {};
+        tried.push({ model, status: d.status, reason: d.reason, error: d.error?.slice(0, 80) });
         const transient = d.reason === 'timeout' || d.status === 429 || d.status >= 500 || d.status === 404;
-        if (!transient || i === MODELS.length - 1) throw err;
+        if (!transient || i === MODELS.length - 1) {
+          err.details = { ...d, tried };
+          throw err;
+        }
       }
     }
-    throw lastErr;
+    throw Errors.upstream();
   }
 
   async function generateWith(model, req) {
