@@ -96,3 +96,26 @@ test('boolean env values are tolerant of casing, spaces and quotes', () => {
   assert.equal(loadConfig({ LLM_PROVIDER: 'mock' }).ENABLE_LEGACY_OPTIMIZE, false);
   assert.throws(() => loadConfig({ LLM_PROVIDER: 'mock', ENABLE_LEGACY_OPTIMIZE: 'maybe' }), /ENABLE_LEGACY_OPTIMIZE/);
 });
+
+test('gemini: falls back to the next model when the primary is overloaded', async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(url);
+    if (url.includes('primary-model')) return new Response(JSON.stringify({ error: { message: 'high demand' } }), { status: 503 });
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: '{"ok":true}' }] } }], usageMetadata: { promptTokenCount: 1 } }), { status: 200 });
+  };
+  const g = createGeminiProvider({ ...cfg, GEMINI_MODEL: 'primary-model', GEMINI_FALLBACK_MODELS: ['backup-model'], LLM_MAX_RETRIES: 0 }, { fetchImpl });
+  const out = await g.generate({ system: 's', parts: [{ text: 'x' }] });
+  assert.equal(out.model, 'backup-model');
+  assert.equal(out.fallbackFrom, 'primary-model');
+  assert.ok(calls[0].includes('primary-model') && calls[1].includes('backup-model'));
+});
+
+test('gemini: does not fall back on a client error', async () => {
+  let n = 0;
+  const fetchImpl = async () => { n++; return new Response(JSON.stringify({ error: { message: 'bad key' } }), { status: 400 }); };
+  const g = createGeminiProvider({ ...cfg, GEMINI_STRUCTURED_MODE: 'mime_only', GEMINI_FALLBACK_MODELS: ['backup-model'], LLM_MAX_RETRIES: 0 }, { fetchImpl });
+  await assert.rejects(g.generate({ system: 's', parts: [{ text: 'x' }] }), (e) => e.code === 'UPSTREAM_ERROR');
+  assert.equal(n, 1);
+});
+
