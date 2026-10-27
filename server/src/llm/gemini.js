@@ -58,7 +58,9 @@ export function createGeminiProvider(config, { fetchImpl = fetch } = {}) {
     const generationConfig = {
       temperature: req.temperature ?? 0.2,
       ...(req.maxOutputTokens ? { maxOutputTokens: req.maxOutputTokens } : {}),
-      ...(req.thinkingBudget !== undefined ? { thinkingConfig: { thinkingBudget: req.thinkingBudget } } : {}),
+      // Yedek modeller farklı nesilden olabilir (ör. "minimal" düşünmeyi desteklemeyen 3.8 Flash);
+      // onlara düşünme ayarı gönderilmez, modelin varsayılanı kullanılır.
+      ...(req.thinkingBudget !== undefined && model === GEMINI_MODEL ? { thinkingConfig: { thinkingBudget: req.thinkingBudget } } : {}),
     };
     if (req.json || req.jsonSchema) generationConfig.responseMimeType = 'application/json';
     if (req.jsonSchema && schemaSupported) generationConfig.responseJsonSchema = req.jsonSchema;
