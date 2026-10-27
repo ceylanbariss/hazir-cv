@@ -34,3 +34,12 @@ export const updateCv = (id, patch) => request(`/cvs/${id}`, { method: 'PATCH', 
 export const deleteCv = (id) => request(`/cvs/${id}`, { method: 'DELETE' });
 export const suggestRoles = (roles) => request('/roles/suggest', { method: 'POST', body: { roles } });
 export const saveTargets = (targets) => request('/targets', { method: 'PUT', body: targets });
+
+// Faz 2: Gmail bağlantısı, başvurular, elle tarama
+export const getGmail = () => request('/gmail');
+export const connectGmail = () => request('/gmail/connect', { method: 'POST' });
+export const disconnectGmail = () => request('/gmail', { method: 'DELETE' });
+export const listApplications = (status) => request(`/applications${status ? `?status=${status}` : ''}`);
+export const updateApplication = (id, patch) => request(`/applications/${id}`, { method: 'PATCH', body: patch });
+export const sendApplication = (id) => request(`/applications/${id}/send`, { method: 'POST' });
+export const runNow = () => request('/run', { method: 'POST' });
