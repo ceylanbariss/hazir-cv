@@ -23,11 +23,18 @@ export async function readPdf(file) {
   const pdfjs = await loadPdfJs();
   const pdf = await pdfjs.getDocument({ data: buf.slice(0) }).promise;
   let text = '';
+  const links = []; // "LinkedIn" yazısının arkasındaki gerçek adres gibi tıklanabilir bağlantılar
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const c = await page.getTextContent();
     text += c.items.map((it) => it.str + (it.hasEOL ? '\n' : ' ')).join('') + '\n';
+    try {
+      for (const a of await page.getAnnotations()) {
+        if (a.subtype === 'Link' && /^https?:\/\//i.test(a.url || '') && !links.includes(a.url)) links.push(a.url);
+      }
+    } catch { /* bağlantılar okunamazsa yalnızca metin */ }
   }
+  if (links.length) text += '\n' + links.join('\n');
   text = text.replace(/[ \t]+\n/g, '\n').trim();
   if (text.length < 200) throw new Error('Bu PDF görsel olarak kaydedilmiş, içindeki yazılar okunamıyor. Metin tabanlı bir PDF yükle.');
   let bin = '';
