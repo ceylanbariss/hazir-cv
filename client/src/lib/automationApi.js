@@ -43,3 +43,42 @@ export const listApplications = (status) => request(`/applications${status ? `?s
 export const updateApplication = (id, patch) => request(`/applications/${id}`, { method: 'PATCH', body: patch });
 export const sendApplication = (id) => request(`/applications/${id}/send`, { method: 'POST' });
 export const runNow = () => request('/run', { method: 'POST' });
+
+/** Starts today's scan and streams its steps: onEvent({ type: 'progress' | 'result' | 'error', ... }). */
+export async function runNowStream(onEvent) {
+  const token = (await getSession())?.access_token;
+  if (!token) throw new ApiError('UNAUTHORIZED', 'Oturum bulunamadı. Lütfen tekrar giriş yapın.', { status: 401 });
+  let res;
+  try {
+    res = await fetch(`${API_URL}/api/v1/automation/run?stream=1`, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+  } catch {
+    throw new ApiError('NETWORK', 'Sunucuya ulaşılamadı. İnternet bağlantınızı kontrol edip tekrar deneyin.');
+  }
+  if (!res.ok || !res.body) {
+    const json = await res.json().catch(() => ({}));
+    if (res.status === 401) await signOut();
+    throw new ApiError(json?.error?.code || `HTTP_${res.status}`, json?.error?.message || `Sunucu hatası (${res.status}).`, { status: res.status });
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  let last = null;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      if (!line) continue;
+      try {
+        const ev = JSON.parse(line);
+        if (ev.type === 'ping') continue;
+        last = ev;
+        onEvent(ev);
+      } catch { /* yarım satır */ }
+    }
+  }
+  return last;
+}
