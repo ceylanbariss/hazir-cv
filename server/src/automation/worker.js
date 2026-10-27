@@ -66,7 +66,27 @@ export async function listDueUsers(supabase) {
   return rows.map((r) => r.id);
 }
 
-export async function runForUser({ supabase, llm, budget, search, readPage, log, config, userId, now = new Date(), force = false, sleep = sleepMs }) {
+const REASONS = {
+  'sayfada olmayan adres': 'sayfada güvenilir bir başvuru adresi yok',
+  'Türkiye dışı': 'Türkiye dışında bir iş',
+  'kişisel site': 'şirket sitesi değil',
+  'kariyer/İK ürünü': 'işe alım / kariyer hizmeti satan bir şirket',
+  'işe alım ifadesi yok': 'sayfada işe alım yaptıklarına dair ifade yok',
+  'alan adı uyuşmuyor': 'e-posta adresi şirketin alan adıyla uyuşmuyor',
+  'hariç tutulan kelime': 'hariç tuttuğun bir kelime geçiyor',
+};
+const whyRejected = (kind, v, warnings) => {
+  if (kind === 'low_score') return `uygunluk puanı düşük (${v.score})`;
+  if (warnings.length) return REASONS[warnings[0]] || warnings[0];
+  if (!v.email) return 'başvuru için e-posta adresi yok';
+  return v.reason || 'hedeflerine uymuyor';
+};
+
+/**
+ * onProgress({ step, message, pct, stats }) is called at every meaningful step so the panel
+ * can narrate the scan live. step: start | search | read | evaluate | draft | skip | done.
+ */
+export async function runForUser({ supabase, llm, budget, search, readPage, log, config, userId, now = new Date(), force = false, sleep = sleepMs, onProgress = () => {} }) {
   const uid = enc(userId);
   const [profile] = await supabase.select('profiles', `id=eq.${uid}&select=*`);
   if (!profile) return { status: 'skipped', reason: 'no_profile' };
@@ -99,6 +119,10 @@ export async function runForUser({ supabase, llm, budget, search, readPage, log,
 
   const [run] = await supabase.insert('run_logs', [{ user_id: userId, started_at: now.toISOString() }]);
   const stats = { searches: 0, hits: 0, pages: 0, evaluated: 0, drafted: 0, errors: [] };
+  const emit = (step, message, pct) => {
+    try { onProgress({ step, message, pct: Math.round(pct), stats: { searches: stats.searches, hits: stats.hits, pages: stats.pages, evaluated: stats.evaluated, drafted: stats.drafted } }); } catch { /* izleyici koptu */ }
+  };
+  emit('start', `Profilini ve hedeflerini okudum: ${targets.roles.slice(0, 3).join(', ')}${targets.roles.length > 3 ? '…' : ''}`, 3);
 
   try {
     // 1) Arama
@@ -108,7 +132,8 @@ export async function runForUser({ supabase, llm, budget, search, readPage, log,
     );
     const seenUrls = new Set();
     const hits = [];
-    for (const q of queries) {
+    for (const [qi, q] of queries.entries()) {
+      emit('search', `İnternette arıyorum: ${q.replace(/"/g, '')}`, 5 + (qi / queries.length) * 20);
       const r = await search.search(q, today.slice(0, 10));
       if (!r.cached && r.provider) stats.searches++;
       for (const h of r.results) {
@@ -119,13 +144,25 @@ export async function runForUser({ supabase, llm, budget, search, readPage, log,
       }
     }
     stats.hits = hits.length;
+    emit('search', hits.length ? `${hits.length} sayfa buldum. Daha önce baktıklarımı ve ilan sitelerini eliyorum.` : 'Bu aramalarda uygun sayfa çıkmadı.', 25);
 
     // 2) Daha önce görülen sayfaları ele, kalanları oku
     const since = new Date(now.getTime() - SEEN_DAYS * 86_400_000).toISOString();
     const seen = new Set((await supabase.select('discoveries', `user_id=eq.${uid}&seen_at=gte.${enc(since)}&select=url&limit=5000`)).map((d) => d.url));
     const fresh = hits.filter((h) => !seen.has(h.url)).slice(0, config.PAGES_PER_USER * 3);
-    const pages = (await mapLimit(fresh, 4, readPage)).filter((p) => p.emails.length).slice(0, config.PAGES_PER_USER);
+    let read = 0;
+    const pages = (
+      await mapLimit(fresh, 4, async (h) => {
+        const p = await readPage(h);
+        read++;
+        emit('read', `Sayfayı okuyorum: ${p.host || hostOf(h.url)}${p.emails.length ? ' · başvuru adresi var' : ''}`, 25 + (read / Math.max(fresh.length, 1)) * 25);
+        return p;
+      })
+    )
+      .filter((p) => p.emails.length)
+      .slice(0, config.PAGES_PER_USER);
     stats.pages = pages.length;
+    emit('read', pages.length ? `${pages.length} sayfada başvuru adresi var. Tek tek değerlendiriyorum.` : 'Okuduğum sayfalarda başvuru adresi bulamadım.', 50);
 
     // 3) Şirket bekleme süresi ve günlük limit
     const cooldownSince = new Date(now.getTime() - profile.company_cooldown_days * 86_400_000).toISOString();
@@ -137,24 +174,40 @@ export async function runForUser({ supabase, llm, budget, search, readPage, log,
     const promptProfile = { ...cvProfile };
     const promptTargets = { roles: targets.roles, excluded: targets.excluded, cities: targets.cities, work_modes: targets.work_modes, seniority: targets.seniority, long_term_internship: targets.long_term_internship };
     const cvIds = new Set(cvs.map((c) => c.id));
-    for (const page of pages) {
-      if (todayCount >= profile.daily_limit) break;
+    for (const [pi, page] of pages.entries()) {
+      if (todayCount >= profile.daily_limit) {
+        emit('skip', `Günlük limitine (${profile.daily_limit}) ulaştım, kalan sayfalar yarına kaldı.`, 95);
+        break;
+      }
+      const pct = 50 + (pi / pages.length) * 45;
+      emit('evaluate', `İlanı CV'nle karşılaştırıyorum: ${page.title?.slice(0, 70) || page.host}`, pct);
       if (stats.evaluated > 0) await sleep(config.WORKER_LLM_GAP_MS);
       let v;
       try {
         v = await runTask(ctx, P.evaluatePage({ profile: promptProfile, targets: promptTargets, cvs, page, fullName, portfolioUrl: profile.portfolio_url }));
       } catch (err) {
         stats.errors.push(err.code || 'ERROR');
-        if (STOP_CODES.has(err.code) || err.details?.status === 429) break;
+        if (STOP_CODES.has(err.code) || err.details?.status === 429) {
+          emit('skip', 'Yapay zekanın bugünkü kullanım hakkı doldu; kalanlara yarın bakacağım.', 95);
+          break;
+        }
+        emit('skip', `${page.host}: değerlendirilemedi, sıradakine geçiyorum.`, pct);
         continue;
       }
       stats.evaluated++;
       const { kind, email, warnings } = checkVerdict(v, page, targets.excluded);
       await supabase.insert('discoveries', [{ user_id: userId, url: page.url, kind: kind === 'low_score' ? v.kind : kind, score: v.score, seen_at: now.toISOString() }], { upsert: true, onConflict: 'user_id,url' });
-      if (kind !== 'job' && kind !== 'open_application') continue;
+      const label = [v.company || page.host, v.position].filter(Boolean).join(' · ');
+      if (kind !== 'job' && kind !== 'open_application') {
+        emit('skip', `Elendi — ${label}: ${whyRejected(kind, v, warnings)}`, pct + 3);
+        continue;
+      }
 
       const companyKey = rootName(FREE_MAIL.test(email) ? page.host : email.split('@')[1]);
-      if (blocked.has(companyKey)) continue;
+      if (blocked.has(companyKey)) {
+        emit('skip', `Atlandı — ${label}: bu şirkete yakın zamanda başvurulmuş`, pct + 3);
+        continue;
+      }
       blocked.add(companyKey);
       await supabase.insert('applications', [
         {
@@ -176,6 +229,7 @@ export async function runForUser({ supabase, llm, budget, search, readPage, log,
       ]);
       stats.drafted++;
       todayCount++;
+      emit('draft', `Uygun buldum — ${label} (${v.score} puan). Ön yazıyı hazırladım, onayına sundum.`, pct + 3);
     }
 
     if (stats.drafted) {
@@ -189,6 +243,7 @@ export async function runForUser({ supabase, llm, budget, search, readPage, log,
         },
       ]);
     }
+    emit('done', stats.drafted ? `Bitti: ${stats.drafted} başvuru onayını bekliyor.` : 'Bitti: bugün sana uygun yeni ilan çıkmadı. Yarın sabah tekrar bakacağım.', 100);
     return { status: 'ok', ...stats };
   } catch (err) {
     stats.errors.push(err.code || err.message);
