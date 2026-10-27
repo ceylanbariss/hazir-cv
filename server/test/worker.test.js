@@ -262,3 +262,23 @@ test('disconnecting Gmail removes the stored token', async () => {
   assert.equal(r.status, 200);
   assert.equal(sb.db.gmail_connections.length, 0);
 });
+
+test('manual scan streams live progress lines and a final result', async () => {
+  sb.db.run_logs = []; // bugünkü çalışma kaydını sil, yeniden tarayabilsin
+  sb.db.applications = [];
+  sb.db.discoveries = [];
+  const r = await call('/run?stream=1', { method: 'POST' });
+  assert.equal(r.status, 200);
+  assert.match(r.headers.get('content-type'), /ndjson/);
+  const lines = (await r.text()).trim().split('\n').map((l) => JSON.parse(l));
+  const steps = lines.filter((l) => l.type === 'progress').map((l) => l.step);
+  assert.ok(steps.includes('search') && steps.includes('read') && steps.includes('evaluate') && steps.includes('draft'));
+  assert.ok(lines.some((l) => l.type === 'progress' && /Elendi/.test(l.message)));
+  const pcts = lines.filter((l) => l.type === 'progress').map((l) => l.pct);
+  assert.deepEqual(pcts, [...pcts].sort((a, b) => a - b));
+  assert.equal(pcts.at(-1), 100);
+  const result = lines.at(-1);
+  assert.equal(result.type, 'result');
+  assert.equal(result.drafted, 1);
+});
+
