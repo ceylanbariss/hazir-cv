@@ -8,10 +8,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export function createGeminiProvider(config, { fetchImpl = fetch } = {}) {
   const { GEMINI_API_KEY, GEMINI_MODEL, LLM_TIMEOUT_MS, LLM_MAX_RETRIES, GEMINI_STRUCTURED_MODE } = config;
+  // Yoğunluk (503), kota (429) ya da zaman aşımında sıradaki modele geçilir.
+  const MODELS = [GEMINI_MODEL, ...(config.GEMINI_FALLBACK_MODELS || []).filter((m) => m && m !== GEMINI_MODEL)];
   let schemaSupported = GEMINI_STRUCTURED_MODE === 'json_schema';
 
-  async function once(body, signal) {
-    const res = await fetchImpl(`${BASE}/${encodeURIComponent(GEMINI_MODEL)}:generateContent`, {
+  async function once(model, body, signal) {
+    const res = await fetchImpl(`${BASE}/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-goog-api-key': GEMINI_API_KEY },
       body: JSON.stringify(body),
@@ -37,6 +39,22 @@ export function createGeminiProvider(config, { fetchImpl = fetch } = {}) {
    * @param {number} [req.thinkingBudget]
    */
   async function generate(req) {
+    let lastErr;
+    for (const [i, model] of MODELS.entries()) {
+      try {
+        const out = await generateWith(model, req);
+        return i ? { ...out, fallbackFrom: GEMINI_MODEL } : out;
+      } catch (err) {
+        lastErr = err;
+        const d = err.details || {};
+        const transient = d.reason === 'timeout' || d.status === 429 || d.status >= 500 || d.status === 404;
+        if (!transient || i === MODELS.length - 1) throw err;
+      }
+    }
+    throw lastErr;
+  }
+
+  async function generateWith(model, req) {
     const generationConfig = {
       temperature: req.temperature ?? 0.2,
       ...(req.maxOutputTokens ? { maxOutputTokens: req.maxOutputTokens } : {}),
@@ -57,10 +75,12 @@ export function createGeminiProvider(config, { fetchImpl = fetch } = {}) {
       const timer = setTimeout(() => ctrl.abort(), LLM_TIMEOUT_MS);
       let result;
       try {
-        result = await once(body, ctrl.signal);
+        result = await once(model, body, ctrl.signal);
       } catch (err) {
         clearTimeout(timer);
-        if (attempt < LLM_MAX_RETRIES) {
+        // Zaman aşımında aynı modeli tekrar beklemek yerine yedek modele geç (varsa).
+        const timedOut = err.name === 'AbortError';
+        if (attempt < LLM_MAX_RETRIES && !(timedOut && model !== MODELS[MODELS.length - 1])) {
           attempt += 1;
           await sleep(backoff(attempt));
           continue;
@@ -100,7 +120,7 @@ export function createGeminiProvider(config, { fetchImpl = fetch } = {}) {
       const u = json.usageMetadata || {};
       return {
         text,
-        model: GEMINI_MODEL,
+        model,
         finishReason: cand?.finishReason,
         usage: {
           inputTokens: u.promptTokenCount || 0,
