@@ -73,6 +73,7 @@ export function v1Router({ deps, limiters }) {
     } catch (err) {
       const appErr = err?.code ? err : Errors.upstream();
       if (!err?.code) req.log.error('tailor_failed', { err: err?.message });
+      else req.log.warn('tailor_failed', { code: err.code, details: err.details });
       if (!closed) sse.send('error', toBody(appErr, req));
     } finally {
       sse.close();
