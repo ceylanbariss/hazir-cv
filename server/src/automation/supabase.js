@@ -64,6 +64,24 @@ export function createSupabase({ url, serviceKey, fetchImpl = fetch, timeoutMs =
       });
       if (!r.ok) throw Errors.upstream('Dosya yüklenemedi. Lütfen tekrar deneyin.', { status: r.status });
     },
+    /** Downloads a private file from Storage as a Buffer. */
+    async download(bucket, path) {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), timeoutMs * 2);
+      try {
+        const res = await fetchImpl(`${base}/storage/v1/object/${bucket}/${path}`, {
+          headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+          signal: ctrl.signal,
+        });
+        if (!res.ok) throw Errors.upstream('CV dosyası okunamadı. Lütfen tekrar deneyin.', { status: res.status });
+        return Buffer.from(await res.arrayBuffer());
+      } catch (err) {
+        if (err.code) throw err;
+        throw Errors.upstream('CV dosyası okunamadı. Lütfen tekrar deneyin.', { cause: err.message });
+      } finally {
+        clearTimeout(timer);
+      }
+    },
     async removeFiles(bucket, paths) {
       if (!paths.length) return;
       await call(`/storage/v1/object/${bucket}`, { method: 'DELETE', body: { prefixes: paths } });
