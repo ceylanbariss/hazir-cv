@@ -326,7 +326,7 @@ export default function Wizard({ profile, onExit, onDone }) {
   async function next() {
     setErr(null); setSaving(true);
     try {
-      if (step === 2) await saveTargets(t);
+      if (step === 2) await saveTargets({ roles: t.roles, excluded: t.excluded, cities: t.cities, work_modes: t.work_modes, seniority: t.seniority, long_term_internship: t.long_term_internship });
       if (step === 3) {
         const { profile: updated } = await updateMe({ ...p, setup_step: 6 });
         return onDone(updated);
