@@ -51,6 +51,22 @@ const EnvSchema = z.object({
   SUPABASE_URL: z.string().url().optional(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().optional(),
 
+  // Faz 2: Gmail ile gönderim (Google OAuth istemcisi) ve refresh token şifreleme anahtarı.
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  TOKEN_ENC_KEY: z.string().optional(),
+  // Günlük işçi: GitHub Actions bu sırla /internal uçlarını çağırır.
+  CRON_SECRET: z.string().optional(),
+  // İlan araması (ikisi de isteğe bağlı; önce Tavily, kota/hata olursa SerpApi).
+  TAVILY_API_KEY: z.string().optional(),
+  SERPAPI_KEY: z.string().optional(),
+  SEARCHES_PER_USER: z.coerce.number().int().min(1).max(10).default(4),
+  PAGES_PER_USER: z.coerce.number().int().min(1).max(30).default(10),
+  // Ücretsiz Gemini katmanı dakikada ~15 istek; işçi çağrılar arasında bu kadar bekler.
+  WORKER_LLM_GAP_MS: z.coerce.number().int().min(0).default(4500),
+  API_PUBLIC_URL: z.string().url().default('https://resumatch-backend-zsmt.onrender.com'),
+  APP_URL: z.string().url().default('https://hazircv.com.tr'),
+
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error', 'silent']).default('info'),
 });
 
@@ -66,7 +82,7 @@ export function loadConfig(env = process.env) {
   }
   // Tolerate keys pasted with quotes/whitespace in hosting dashboards.
   if (cfg.GEMINI_API_KEY) cfg.GEMINI_API_KEY = cfg.GEMINI_API_KEY.replace(/['"]/g, '').trim();
-  for (const k of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY']) {
+  for (const k of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'TOKEN_ENC_KEY', 'CRON_SECRET', 'TAVILY_API_KEY', 'SERPAPI_KEY']) {
     if (cfg[k]) cfg[k] = cfg[k].replace(/['"]/g, '').trim();
   }
   if (cfg.SUPABASE_URL) cfg.SUPABASE_URL = cfg.SUPABASE_URL.replace(/\/$/, '');
@@ -74,5 +90,8 @@ export function loadConfig(env = process.env) {
     throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set together.');
   }
   cfg.automationEnabled = Boolean(cfg.SUPABASE_URL);
+  cfg.gmailEnabled = Boolean(cfg.GOOGLE_CLIENT_ID && cfg.GOOGLE_CLIENT_SECRET && cfg.TOKEN_ENC_KEY);
+  cfg.API_PUBLIC_URL = cfg.API_PUBLIC_URL.replace(/\/$/, '');
+  cfg.APP_URL = cfg.APP_URL.replace(/\/$/, '');
   return Object.freeze({ ...cfg, originPattern: new RegExp(cfg.ALLOWED_ORIGIN_PATTERN) });
 }

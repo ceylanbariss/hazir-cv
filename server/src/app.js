@@ -6,6 +6,10 @@ import { Errors } from './lib/errors.js';
 import { v1Router } from './routes/v1.js';
 import { automationRouter } from './routes/automation.js';
 import { createSupabase } from './automation/supabase.js';
+import { createGmail } from './automation/gmail.js';
+import { createSealer } from './automation/crypto.js';
+import { createSearch } from './automation/search.js';
+import { createPageReader } from './automation/pages.js';
 
 const HOUR = 60 * 60 * 1000;
 
@@ -13,7 +17,7 @@ const HOUR = 60 * 60 * 1000;
  * Builds the Express app. Dependencies are injected so tests can run the real
  * HTTP stack against a mock LLM.
  */
-export function createApp({ config, llm, logger, budget, semaphore, limiters, supabase } = {}) {
+export function createApp({ config, llm, logger, budget, semaphore, limiters, supabase, gmail, search, readPage } = {}) {
   const deps = {
     config,
     llm,
@@ -39,9 +43,26 @@ export function createApp({ config, llm, logger, budget, semaphore, limiters, su
     supabase ||
     (config.automationEnabled ? createSupabase({ url: config.SUPABASE_URL, serviceKey: config.SUPABASE_SERVICE_ROLE_KEY }) : null);
   if (db) {
+    const sealer = config.TOKEN_ENC_KEY ? createSealer(config.TOKEN_ENC_KEY) : null;
+    const mail =
+      gmail ||
+      (config.gmailEnabled
+        ? createGmail({ clientId: config.GOOGLE_CLIENT_ID, clientSecret: config.GOOGLE_CLIENT_SECRET, redirectUri: `${config.API_PUBLIC_URL}/api/v1/automation/gmail/callback` })
+        : null);
     app.use(
       '/api/v1/automation',
-      automationRouter({ supabase: db, limiter: lim.automation || lim.chat, heavyLimiter: lim.automationAi || lim.heavy, llm, budget: deps.budget }),
+      automationRouter({
+        supabase: db,
+        limiter: lim.automation || lim.chat,
+        heavyLimiter: lim.automationAi || lim.heavy,
+        llm,
+        budget: deps.budget,
+        config,
+        gmail: mail,
+        sealer,
+        search: search || createSearch({ tavilyKey: config.TAVILY_API_KEY, serpKey: config.SERPAPI_KEY, log: logger }),
+        readPage: readPage || createPageReader(),
+      }),
     );
   } else {
     app.use('/api/v1/automation', (req, res, next) => next(Errors.notConfigured()));
