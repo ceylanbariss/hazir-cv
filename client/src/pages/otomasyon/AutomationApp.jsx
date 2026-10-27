@@ -6,6 +6,7 @@ import { getMe, updateMe, getInbox, markInboxRead } from '../../lib/automationAp
 import { navigate } from '../../router.js';
 import { Shell, TopBar, Footer, Spinner } from '../../hz/ui.jsx';
 import Wizard from './Wizard.jsx';
+import { PendingView, SentView, SettingsView, useGmail, startGmailConnect, gmailReturnMessage } from './Applications.jsx';
 
 const go = (path) => (e) => { e.preventDefault(); navigate(path); };
 
@@ -127,9 +128,21 @@ function InboxView({ onRead }) {
 
 const Later = ({ text }) => <div className="hz-empty"><p>{text}</p></div>;
 
-function SetupCallout({ profile, onStart }) {
+function SetupCallout({ profile, onStart, gmail, onConnect }) {
   const first = profile.full_name?.split(' ')[0];
   if (profile.setup_step >= 6) {
+    if (gmail?.connected) return null;
+    if (gmail?.available) {
+      return (
+        <div className="hz-callout">
+          <div>
+            <h2 className="hz-h2">Son adım: Gmail'ini bağla</h2>
+            <p>Asistan her sabah uygun ilanları bulup ön yazıları hazırlar. Onayladığın başvurular kendi Gmail adresinden, CV'n ekli olarak gider. Yalnızca e-posta gönderme izni istenir; gelen kutun okunmaz.</p>
+          </div>
+          <button type="button" className="hz-btn hz-btn-posta" onClick={onConnect}>Gmail'i bağla</button>
+        </div>
+      );
+    }
     return (
       <div className="hz-callout">
         <div>
@@ -152,9 +165,12 @@ function SetupCallout({ profile, onStart }) {
   );
 }
 
-export function Panel({ profile, unread, setUnread, onSignOut, onStartSetup, inbox }) {
-  const [tab, setTab] = useState('inbox');
+export function Panel({ profile, unread, setUnread, onSignOut, onStartSetup, inbox, notice }) {
+  const [tab, setTab] = useState(notice ? 'settings' : 'inbox');
   const onRead = useCallback(() => setUnread(0), [setUnread]);
+  const [gmail, reloadGmail] = useGmail();
+  const [connectErr, setConnectErr] = useState(null);
+  const onConnect = useCallback(() => { setConnectErr(null); startGmailConnect().catch((e) => setConnectErr(e.message)); }, []);
   return (
     <Shell>
       <TopBar>
@@ -162,7 +178,9 @@ export function Panel({ profile, unread, setUnread, onSignOut, onStartSetup, inb
         <button type="button" className="hz-link" onClick={onSignOut}>Çıkış yap</button>
       </TopBar>
       <main className="hz-wrap">
-        <SetupCallout profile={profile} onStart={onStartSetup} />
+        {notice && <p className={notice[0] === 'ok' ? 'hz-ok' : 'hz-notice'} role="status" style={{ marginBottom: 20 }}>{notice[1]}</p>}
+        {connectErr && <p className="hz-notice" role="alert" style={{ marginBottom: 20 }}>{connectErr}</p>}
+        <SetupCallout profile={profile} onStart={onStartSetup} gmail={gmail} onConnect={onConnect} />
         <div className="hz-panel">
           <nav className="hz-nav" aria-label="Panel">
             {TABS.map(([id, label]) => (
@@ -175,10 +193,10 @@ export function Panel({ profile, unread, setUnread, onSignOut, onStartSetup, inb
           <section className="hz-sheet" aria-labelledby="panel-title">
             <h1 id="panel-title" className="hz-h2" style={{ padding: '22px 26px 6px' }}>{TABS.find((t) => t[0] === tab)[1]}</h1>
             {tab === 'inbox' && (inbox ? <InboxList items={inbox} /> : <InboxView onRead={onRead} />)}
-            {tab === 'today' && <Later text="Asistan çalışmaya başladığında her gün hazırlanan başvurular burada onayını bekleyecek." />}
-            {tab === 'applications' && <Later text="Gönderdiğin başvurular ve durumları burada listelenecek." />}
+            {tab === 'today' && (profile.setup_step >= 6 ? <PendingView gmail={gmail} onConnect={onConnect} /> : <Later text="Kurulumu tamamladığında her gün hazırlanan başvurular burada onayını bekleyecek." />)}
+            {tab === 'applications' && <SentView />}
             {tab === 'listings' && <Later text="LinkedIn ve Kariyer.net alarmlarından gelen ilanlar burada puanlarıyla görünecek." />}
-            {tab === 'settings' && <Later text="Gönderim modu, günlük limit, Gmail bağlantısı ve hesabını silme seçenekleri burada olacak. Şimdilik kurulumu düzenleyerek değiştirebilirsin." />}
+            {tab === 'settings' && <SettingsView gmail={gmail} reloadGmail={reloadGmail} onConnect={onConnect} onEditSetup={onStartSetup} />}
           </section>
         </div>
       </main>
@@ -208,6 +226,12 @@ export default function AutomationApp() {
   const [unread, setUnread] = useState(0);
   const [err, setErr] = useState(null);
   const [setup, setSetup] = useState(false);
+  // Google'dan Gmail izni dönüşü: ?gmail=ok|denied|… → bir kez göster, adresi temizle.
+  const [notice] = useState(() => {
+    const code = new URLSearchParams(window.location.search).get('gmail');
+    if (code) window.history.replaceState(null, '', window.location.pathname);
+    return code ? gmailReturnMessage(code) : null;
+  });
 
   useEffect(() => {
     if (!authConfigured) return;
@@ -232,5 +256,5 @@ export default function AutomationApp() {
   if (!me) return <Shell><Spinner /></Shell>;
   if (!me.kvkk_accepted_at) return <Consent email={me.email} onSignOut={signOut} onAccept={async () => setMe((await updateMe({ kvkk_accepted: true })).profile)} />;
   if (setup) return <SetupPage profile={me} onSignOut={signOut} onExit={() => { setSetup(false); getMe().then((r) => setMe(r.profile)).catch(() => {}); }} onDone={(p) => { setMe(p); setSetup(false); }} />;
-  return <Panel profile={me} unread={unread} setUnread={setUnread} onSignOut={signOut} onStartSetup={() => setSetup(true)} />;
+  return <Panel profile={me} unread={unread} setUnread={setUnread} onSignOut={signOut} onStartSetup={() => setSetup(true)} notice={notice} />;
 }
