@@ -339,10 +339,28 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget,
   });
 
   // Kullanıcının kendi taramasını elle başlatması (günde bir kez; zamanlanmış çalışmayla aynı kural).
+  // ?stream=1 → adımlar canlı olarak NDJSON satırları halinde akar ({type:'progress'|'result'|'error'}).
   router.post('/run', heavy, async (req, res) => {
     if (!workerReady) throw Errors.notConfigured();
     await ensureProfile(req);
-    res.json(await runWorker(req.user.id, req.log));
+    if (req.query.stream !== '1') return res.json(await runWorker(req.user.id, req.log));
+
+    res.status(200).set({ 'Content-Type': 'application/x-ndjson; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', 'X-Accel-Buffering': 'no' });
+    res.flushHeaders?.();
+    let open = true;
+    req.on('close', () => { open = false; });
+    const write = (obj) => { if (open) res.write(`${JSON.stringify(obj)}\n`); };
+    const beat = setInterval(() => write({ type: 'ping' }), 15_000);
+    try {
+      const result = await runWorker(req.user.id, req.log, { onProgress: (p) => write({ type: 'progress', ...p }) });
+      write({ type: 'result', ...result });
+    } catch (err) {
+      req.log.warn('run_stream_failed', { code: err.code, error: err.message });
+      write({ type: 'error', code: err.code || 'ERROR', message: err.code ? err.message : 'Tarama tamamlanamadı. Daha sonra tekrar dene.' });
+    } finally {
+      clearInterval(beat);
+      res.end();
+    }
   });
 
   // ---- Gelen kutusu --------------------------------------------------------
