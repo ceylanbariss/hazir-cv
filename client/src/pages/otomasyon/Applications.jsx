@@ -1,6 +1,6 @@
 // Faz 2: onay bekleyen başvurular, gönderilenler, Gmail bağlantısı ve elle tarama.
 import React, { useCallback, useEffect, useState } from 'react';
-import { listApplications, updateApplication, sendApplication, getGmail, connectGmail, disconnectGmail, runNow } from '../../lib/automationApi.js';
+import { listApplications, updateApplication, sendApplication, getGmail, connectGmail, disconnectGmail, runNowStream } from '../../lib/automationApi.js';
 import { Spinner } from '../../hz/ui.jsx';
 
 const fmt = (iso) => new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
@@ -31,6 +31,54 @@ export function gmailReturnMessage(code) {
     error: ['err', 'Gmail bağlanamadı. Lütfen tekrar dene.'],
   }[code] || null;
 }
+
+// ---- Canlı tarama ----------------------------------------------------------------
+const STEP_ICON = { start: '•', search: '⌕', read: '▤', evaluate: '◎', draft: '✓', skip: '–', done: '✓' };
+
+function ScanLive({ events, pct, running, final }) {
+  const list = React.useRef(null);
+  useEffect(() => { list.current?.scrollTo({ top: list.current.scrollHeight, behavior: 'smooth' }); }, [events.length]);
+  const last = events[events.length - 1];
+  const s = last?.stats || {};
+  return (
+    <div className="hz-scan" aria-live="polite">
+      <div className="hz-scan-head">
+        <strong>{running ? 'Asistan çalışıyor' : 'Tarama bitti'}</strong>
+        <span className="hz-meta">{pct}%</span>
+      </div>
+      <div className="hz-bar-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct}>
+        <div className="hz-bar-fill" style={{ width: `${pct}%` }} data-running={running || undefined} />
+      </div>
+      <dl className="hz-scan-stats">
+        <div><dt>Arama</dt><dd>{s.searches ?? 0}</dd></div>
+        <div><dt>Sayfa</dt><dd>{s.hits ?? 0}</dd></div>
+        <div><dt>Değerlendirilen</dt><dd>{s.evaluated ?? 0}</dd></div>
+        <div><dt>Hazırlanan</dt><dd>{s.drafted ?? 0}</dd></div>
+      </dl>
+      <ol className="hz-scan-log" ref={list}>
+        {events.map((e, i) => {
+          const current = running && i === events.length - 1;
+          return (
+            <li key={i} data-step={e.step} data-current={current || undefined}>
+              <span className="hz-scan-icon" aria-hidden="true">{current ? <span className="hz-spin" /> : STEP_ICON[e.step] || '•'}</span>
+              <span>{e.message}</span>
+            </li>
+          );
+        })}
+      </ol>
+      {final && <p className="hz-small" role="status">{final}</p>}
+    </div>
+  );
+}
+
+const resultMessage = (r) =>
+  !r ? 'Tarama tamamlanamadı. Daha sonra tekrar dene.'
+    : r.type === 'error' ? r.message
+      : r.status === 'ok' ? null
+        : r.reason === 'already_ran_today' ? 'Bugünkü tarama zaten yapıldı. Yeni ilanlar yarın sabah gelecek.'
+          : r.reason === 'already_running' ? 'Tarama şu an başka bir pencerede çalışıyor. Birkaç dakika sonra sayfayı yenile.'
+            : r.reason === 'incomplete_setup' || r.reason === 'not_ready' ? 'Önce kurulumu tamamla.'
+              : 'Tarama tamamlanamadı. Daha sonra tekrar dene.';
 
 // ---- Onay bekleyenler -----------------------------------------------------------
 function PendingItem({ app, gmailConnected, onChange, onConnect }) {
@@ -104,7 +152,7 @@ function PendingItem({ app, gmailConnected, onChange, onConnect }) {
 export function PendingView({ gmail, onConnect, onCountChange }) {
   const [items, setItems] = useState(null);
   const [err, setErr] = useState(null);
-  const [run, setRun] = useState({ busy: false, msg: null });
+  const [scan, setScan] = useState(null); // { running, events, pct, final }
 
   const load = useCallback(() => listApplications('pending_approval,failed').then(({ items }) => { setItems(items); onCountChange?.(items.length); }).catch((e) => setErr(e.message)), [onCountChange]);
   useEffect(() => { load(); }, [load]);
@@ -117,20 +165,17 @@ export function PendingView({ gmail, onConnect, onCountChange }) {
     });
   };
 
-  const scan = async () => {
-    setRun({ busy: true, msg: null });
+  const startScan = async () => {
+    setScan({ running: true, events: [{ step: 'start', message: 'Taramayı başlatıyorum…', stats: {} }], pct: 1, final: null });
     try {
-      const r = await runNow();
-      const msg =
-        r.status === 'ok' ? (r.drafted ? `${r.drafted} yeni başvuru hazırlandı.` : 'Tarama bitti; bugün uygun yeni ilan bulunamadı. Yarın tekrar denenecek.')
-          : r.reason === 'already_ran_today' ? 'Bugünkü tarama zaten yapıldı. Yeni ilanlar yarın gelecek.'
-            : r.reason === 'already_running' ? 'Tarama şu an çalışıyor, birkaç dakika sonra sayfayı yenile.'
-              : r.reason === 'incomplete_setup' || r.reason === 'not_ready' ? 'Önce kurulumu tamamla.'
-                : 'Tarama tamamlanamadı. Daha sonra tekrar dene.';
-      setRun({ busy: false, msg });
+      const last = await runNowStream((ev) => {
+        if (ev.type !== 'progress') return;
+        setScan((s) => ({ ...s, events: [...s.events, ev].slice(-60), pct: Math.max(s.pct, Math.min(100, ev.pct || 0)) }));
+      });
+      setScan((s) => ({ ...s, running: false, pct: last?.type === 'result' && last.status === 'ok' ? 100 : s.pct, final: resultMessage(last) }));
       load();
     } catch (e) {
-      setRun({ busy: false, msg: e.message });
+      setScan((s) => ({ ...s, running: false, final: e.message }));
     }
   };
 
@@ -138,11 +183,11 @@ export function PendingView({ gmail, onConnect, onCountChange }) {
   if (!items) return <Spinner />;
   return (
     <>
-      {!items.length && (
+      {scan && <ScanLive {...scan} />}
+      {!items.length && !scan?.running && (
         <div className="hz-empty">
           <p>Onay bekleyen başvuru yok. Asistan her sabah yeni ilanları tarar ve uygun olanlar için ön yazı hazırlar.</p>
-          <button type="button" className="hz-btn hz-btn-sm" disabled={run.busy} onClick={scan}>{run.busy ? <><span className="hz-spin" />Taranıyor (1–3 dk)</> : 'Bugünün taramasını şimdi yap'}</button>
-          {run.msg && <p className="hz-small" role="status">{run.msg}</p>}
+          {!scan && <button type="button" className="hz-btn hz-btn-sm" onClick={startScan}>Bugünün taramasını şimdi yap</button>}
         </div>
       )}
       {items.length > 0 && (
