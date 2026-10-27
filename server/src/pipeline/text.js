@@ -116,6 +116,30 @@ export function extractContacts(text = '') {
   };
 }
 
+const PROFILE_HOSTS = [
+  ['github.com', 'GitHub'], ['gitlab.com', 'GitLab'], ['behance.net', 'Behance'], ['dribbble.com', 'Dribbble'],
+  ['medium.com', 'Medium'], ['kaggle.com', 'Kaggle'], ['huggingface.co', 'Hugging Face'], ['stackoverflow.com', 'Stack Overflow'],
+];
+const URL_RE = /(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)(\/[^\s,;)|<>"']*)?/gi;
+
+/** Profile links other than LinkedIn found in the CV text (GitHub, Behance, …), deduplicated. */
+export function extractProfileLinks(text = '') {
+  const out = [];
+  const seen = new Set();
+  for (const m of String(text).matchAll(URL_RE)) {
+    const host = m[1].toLowerCase();
+    const hit = PROFILE_HOSTS.find(([h]) => host === h || host.endsWith(`.${h}`));
+    if (!hit) continue;
+    const path = (m[2] || '').replace(/[.]+$/, '').replace(/\/$/, '');
+    if (!path || path === '/') continue; // yalnızca alan adı: profil değil
+    const url = `${host}${path}`;
+    if (seen.has(url.toLowerCase())) continue;
+    seen.add(url.toLowerCase());
+    out.push({ label: hit[1], url });
+  }
+  return out.slice(0, 4);
+}
+
 const INJECTION_RE =
   /(ignore|disregard|forget)\s+(all\s+)?(the\s+)?(previous|prior|above|earlier)\s+(instructions|prompts?)|önceki\s+(tüm\s+)?(talimat|komut)|(talimat|komut)[a-zçğıöşü]*\s+(yok\s+say|unut|görmezden)|system\s+(prompt|instruction)|sistem\s+(talimat|komut)|you\s+are\s+now\b|\b(give|assign)\s+(this\s+candidate|me)\s+\d+|\d+\s*puan\s+ver/i;
 

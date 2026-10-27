@@ -4,7 +4,7 @@
 //  2. numbers in rewritten text must exist in the CV;
 //  3. employers / dates must survive the rewrite;
 //  4. unsupported rewritten claims are auto-reverted to the original CV text.
-import { containsQuote, looksLikeInjection, hasTerm, unsupportedNumbers, splitSentences, normalize, extractContacts } from './text.js';
+import { containsQuote, looksLikeInjection, hasTerm, unsupportedNumbers, splitSentences, normalize, extractContacts, extractProfileLinks } from './text.js';
 
 const DOWNGRADE = { met: 'partial', partial: 'missing', missing: 'missing' };
 
@@ -142,6 +142,8 @@ export function groundContacts(cv, t) {
     const inCv = val && normalize(cv).replace(/\s/g, '').includes(normalize(val).replace(/\s/g, ''));
     if (!inCv) out[key] = found[key] || '';
   }
+  // GitHub, Behance gibi profil bağlantıları doğrudan CV metninden alınır (yapay zeka uydurmasın).
+  out.links = extractProfileLinks(cv);
   return out;
 }
 
