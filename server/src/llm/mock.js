@@ -81,6 +81,19 @@ const handlers = {
     return respond({ suggestions: pool.filter((t) => !chosen.includes(t.toLowerCase())).slice(0, 4).map((title) => ({ title, reason: 'Profiline uygun.' })) });
   },
 
+  evaluate_page(text) {
+    const page = between(text, 'page');
+    const emails = (page.match(/Addresses found on the page: (.*)/) || [])[1]?.split(',').map((s) => s.trim()).filter(Boolean) || [];
+    const cvId = (between(text, 'cvs').split('\n')[0] || '').split(':')[0].trim();
+    const irrelevant = /kimya/i.test(page);
+    const kind = irrelevant ? 'irrelevant' : /ilan|pozisyon/i.test(page) ? 'job' : 'open_application';
+    return respond({
+      kind, company: 'Test A.Ş.', position: 'İş Analisti', score: irrelevant ? 10 : 82, reason: 'Profil ile uyumlu.',
+      email: emails[0] || '', cv_id: cvId, subject: 'İş Analisti Başvurusu', in_turkey: true, real_company: true, career_product: false,
+      cover_letter: 'Merhaba,\n\nİlanınızı gördüm ve başvurmak istiyorum.\n\nDeneyimlerim ilanla örtüşüyor. CV\'m ektedir.\n\nSaygılarımla,\nAyşe',
+    });
+  },
+
   classify_document(text) {
     const cv = between(text, 'cv');
     const signals = [/@/, /deneyim|experience/i, /eğitim|education/i, /\+?\d[\d\s]{8,}/].filter((r) => r.test(cv)).length;

@@ -5,6 +5,8 @@ export const PRICES = {
   'gemini-2.5-flash': { input: 0.3, output: 2.5 },
   'gemini-2.5-flash-lite': { input: 0.1, output: 0.4 },
   'gemini-2.5-pro': { input: 1.25, output: 10 },
+  // Ücretsiz katmanda faturalanmaz; bütçe bekçisi için ücretli liste fiyatına yakın tahmin.
+  'gemini-3.1-flash-lite': { input: 0.25, output: 1.5 },
   mock: { input: 0, output: 0 },
 };
 
