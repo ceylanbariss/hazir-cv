@@ -560,11 +560,20 @@ const App = () => {
       } catch (metaErr) { console.warn("Metadata okunamadı, normal taramaya geçiliyor..."); }
 
       let fullText = "";
+      const linkUrls = [];
       for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
         fullText += textContent.items.map(item => item.str).join(" ") + "\n";
+        // "LinkedIn", "GitHub" gibi yazıların arkasındaki tıklanabilir adresler metinde görünmez; ayrıca topla.
+        try {
+          const annotations = await page.getAnnotations();
+          annotations.forEach(a => {
+            if (a.subtype === 'Link' && typeof a.url === 'string' && /^https?:\/\//i.test(a.url) && !linkUrls.includes(a.url)) linkUrls.push(a.url);
+          });
+        } catch { /* bağlantı okunamazsa metinle devam */ }
       }
+      if (linkUrls.length) fullText += "\n" + linkUrls.join("\n") + "\n";
       
       if (fullText.trim().length < 15) {
          setError("Bu PDF bir görsel olarak kaydedildiği için metinleri okunamadı. Lütfen metin tabanlı bir PDF yükleyin.");
@@ -845,6 +854,10 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
       newData.skills = Array.isArray(newData.skills) ? newData.skills.map(clean) : [];
       newData.additional = Array.isArray(newData.additional) ? newData.additional.map(clean) : [];
       
+      // Sunucu CV'den bulduğu GitHub / Behance gibi bağlantıları "links" olarak döndürür.
+      if ((!Array.isArray(newData.customLinks) || !newData.customLinks.length) && Array.isArray(newData.links) && newData.links.length) {
+          newData.customLinks = newData.links.map((l, i) => ({ label: l.label, url: l.url, id: `link-${Date.now()}-${i}` }));
+      }
       newData.customLinks = Array.isArray(newData.customLinks) ? newData.customLinks.map(link => ({
           ...link,
           label: clean(link.label) || "Link",
