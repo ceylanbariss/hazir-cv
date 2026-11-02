@@ -1382,7 +1382,17 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
         backgroundColor: "#ffffff", 
         windowWidth: 794, 
         windowHeight: clone.scrollHeight, 
-        imageTimeout: 0 
+        imageTimeout: 0,
+        // Sayfa açıkken site güncellenirse eski stil dosyası sunucudan kalkar ve PDF stilsiz çıkar.
+        // Tarayıcıda zaten yüklü olan stilleri klona doğrudan kopyala.
+        onclone: (doc) => {
+          const css = Array.from(document.styleSheets).map((sheet) => {
+            try { return Array.from(sheet.cssRules).map((r) => r.cssText).join('\n'); } catch { return ''; }
+          }).join('\n');
+          const style = doc.createElement('style');
+          style.textContent = css;
+          doc.head.appendChild(style);
+        }
       });
       
       document.body.removeChild(clone);
