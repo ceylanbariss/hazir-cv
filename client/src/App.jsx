@@ -12,6 +12,7 @@ import {
   Users, Terminal, AlertOctagon, ThumbsUp, ThumbsDown
 } from 'lucide-react';
 import ReactGA from 'react-ga4';
+import { collectTextLines, prepareTextLayer, drawTextLayerPage } from './lib/pdfTextLayer.js';
 import { tailorCv, interviewTurn, interviewReport as fetchInterviewReport, addItem as addItemApi, integrateGaps as integrateGapsApi, ocrJobPosting, warmUp } from './lib/api.js';
 import { claimRequirement, unclaimRequirement, interviewFocus } from './lib/analysis.js';
 import { RequirementBreakdown, VerificationPanel, PipelineTrace } from './components/AnalysisInsights.jsx';
@@ -1366,6 +1367,10 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
           };
       });
 
+      // Seçilebilir metin katmanı için her satırın yerini görüntü alınmadan önce ölç.
+      let textLines = [];
+      try { textLines = collectTextLines(clone); } catch (e) { console.warn('Metin katmanı ölçülemedi', e); }
+
       const canvas = await window.html2canvas(clone, { 
         scale: 3, 
         useCORS: true, 
@@ -1401,10 +1406,14 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
           subject: encodeURIComponent(fullCvText)
       });
       
+      const layerReady = textLines.length > 0 && await prepareTextLayer(pdf);
+      if (!layerReady) {
+      // Yedek: yazı tipi yüklenemezse eski yöntem (görünmeyen küçük metin bloğu).
       pdf.setTextColor(255, 255, 255); 
       pdf.setFontSize(1);
       const englishSafeText = fullCvText.replace(/ş/g, 's').replace(/Ş/g, 'S').replace(/ğ/g, 'g').replace(/Ğ/g, 'G').replace(/ı/g, 'i').replace(/İ/g, 'I').replace(/ç/g, 'c').replace(/Ç/g, 'C').replace(/ö/g, 'o').replace(/Ö/g, 'O').replace(/ü/g, 'u').replace(/Ü/g, 'U');
       pdf.text(pdf.splitTextToSize(englishSafeText, 200), 5, 5);
+      }
 
       const pdfPageWidth = pdf.internal.pageSize.getWidth();
       const pdfPageHeight = pdf.internal.pageSize.getHeight();
@@ -1420,6 +1429,7 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
         if (pageIndex > 0) pdf.addPage();
         
         pdf.addImage(imgData, 'PNG', 0, position, pdfPageWidth, imgHeight, undefined, 'FAST');
+        if (layerReady) drawTextLayerPage(pdf, textLines, { pxToMm: pdfScale, pageIndex, pageHeightMm: pdfPageHeight });
         
         linkLocations.forEach(link => {
             if (!link.url) return;
