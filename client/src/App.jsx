@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import ReactGA from 'react-ga4';
 import { collectTextLines, prepareTextLayer, drawTextLayerPage } from './lib/pdfTextLayer.js';
+import { bakeProfilePhoto } from './lib/pdfPhoto.js';
 import { tailorCv, interviewTurn, interviewReport as fetchInterviewReport, addItem as addItemApi, integrateGaps as integrateGapsApi, ocrJobPosting, warmUp } from './lib/api.js';
 import { claimRequirement, unclaimRequirement, interviewFocus } from './lib/analysis.js';
 import { RequirementBreakdown, VerificationPanel, PipelineTrace } from './components/AnalysisInsights.jsx';
@@ -1283,6 +1284,9 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
             span.style.display = 'none';
         }
       });
+
+      // Fotoğrafı ekrandaki kırpılmış haliyle sabit bir resme çevir (html2canvas'ın taşırmasını önler).
+      try { await bakeProfilePhoto(resumeElement, clone); } catch (e) { console.warn('Fotoğraf hazırlanamadı', e); }
 
       document.body.appendChild(clone);
 
