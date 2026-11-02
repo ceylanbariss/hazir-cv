@@ -95,7 +95,7 @@ export async function prepareTextLayer(pdf) {
  * Writes the lines that fall on one PDF page as invisible text.
  * pxToMm: mm per CSS px; pageIndex/pageHeightMm: which slice of the long image this page shows.
  */
-export function drawTextLayerPage(pdf, lines, { pxToMm, pageIndex, pageHeightMm, debug = false }) {
+export function drawTextLayerPage(pdf, lines, { pxToMm, pageIndex, pageHeightMm, offsetX = 0, debug = false }) {
   const pageTop = pageIndex * pageHeightMm;
   pdf.setFont(FONT_NAME, 'normal');
   for (const l of lines) {
@@ -106,7 +106,7 @@ export function drawTextLayerPage(pdf, lines, { pxToMm, pageIndex, pageHeightMm,
     const natural = pdf.getTextWidth(l.text);
     const target = l.w * pxToMm;
     const horizontalScale = natural > 0 ? Math.min(3, Math.max(0.3, target / natural)) : 1;
-    pdf.text(l.text, l.x * pxToMm, baseline - pageTop, { renderingMode: debug ? 'fill' : 'invisible', horizontalScale, baseline: 'alphabetic' });
+    pdf.text(l.text, offsetX + l.x * pxToMm, baseline - pageTop, { renderingMode: debug ? 'fill' : 'invisible', horizontalScale, baseline: 'alphabetic' });
   }
 }
 
