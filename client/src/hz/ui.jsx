@@ -92,3 +92,13 @@ export function EnvelopeArt() {
     </svg>
   );
 }
+
+/** "Tek ilana CV hazırla" geçici olarak kapalı: üzerine gelince ya da dokununca "bakımda" yazar. */
+export function MaintenanceButton({ label, className = 'hz-btn', note = 'Kısa süreliğine bakımda' }) {
+  return (
+    <button type="button" className={`${className} hz-soon`} aria-disabled="true" title={note} onClick={(e) => e.preventDefault()}>
+      <span className="hz-soon-label">{label}</span>
+      <span className="hz-soon-note" aria-hidden="true">{note}</span>
+    </button>
+  );
+}

@@ -381,3 +381,22 @@
 .hz-source:hover { background: var(--posta-acik); box-shadow: 2px 2px 0 var(--murekkep); }
 .hz-source-label { padding: 2px 8px; background: var(--murekkep); color: #fff; border-radius: 2px; font-size: 12px; font-weight: 700; letter-spacing: .02em; }
 .hz-source-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+
+/* ---- Açılış butonları ve geçici bakım ------------------------------------------ */
+.hz-btn-lg { min-height: 54px; min-width: 232px; padding: 0 28px; font-size: 17px; }
+@media (max-width: 520px) { .hz-hero-cta .hz-btn-lg { flex: 1 1 100%; min-width: 0; } }
+.hz-soon { position: relative; cursor: not-allowed; }
+.hz-soon .hz-soon-note { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity .15s ease; white-space: nowrap; }
+.hz-soon .hz-soon-label { transition: opacity .15s ease; }
+.hz-soon:hover .hz-soon-label, .hz-soon:focus-visible .hz-soon-label, .hz-soon:active .hz-soon-label,
+.hz-choice-off:hover .hz-soon-label { opacity: 0; }
+.hz-soon:hover .hz-soon-note, .hz-soon:focus-visible .hz-soon-note, .hz-soon:active .hz-soon-note,
+.hz-choice-off:hover .hz-soon-note { opacity: 1; }
+.hz-btn.hz-soon { color: var(--soluk); border-color: var(--cizgi); }
+.hz-btn.hz-soon:hover { box-shadow: none; transform: none; background: #f1f5f9; }
+.hz-link.hz-soon { text-decoration: none; color: var(--soluk); }
+.hz-choice-off { cursor: not-allowed; }
+.hz-choice-off:hover { transform: none; box-shadow: none; }
+.hz-choice-off .hz-choice-art, .hz-choice-off .hz-choice-body h3, .hz-choice-off .hz-choice-body p { opacity: .55; }
+.hz-link.hz-soon .hz-soon-note { justify-content: flex-end; }
+.hz-choice-off .hz-btn.hz-soon { min-width: 232px; box-shadow: none !important; transform: none !important; }
