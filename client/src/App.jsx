@@ -12,7 +12,7 @@ import {
   Users, Terminal, AlertOctagon, ThumbsUp, ThumbsDown
 } from 'lucide-react';
 import ReactGA from 'react-ga4';
-import { collectTextLines, prepareTextLayer, drawTextLayerPage } from './lib/pdfTextLayer.js';
+import { collectTextLines, prepareTextLayer, drawTextLayerPage, calibrateTextLines } from './lib/pdfTextLayer.js';
 import { bakeProfilePhoto } from './lib/pdfPhoto.js';
 import { tailorCv, interviewTurn, interviewReport as fetchInterviewReport, addItem as addItemApi, integrateGaps as integrateGapsApi, ocrJobPosting, warmUp } from './lib/api.js';
 import { claimRequirement, unclaimRequirement, interviewFocus } from './lib/analysis.js';
@@ -1386,6 +1386,7 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
       });
       
       document.body.removeChild(clone);
+      try { calibrateTextLines(textLines, canvas, 3); } catch (e) { console.warn('Metin katmanı hizalanamadı', e); }
       
       const imgData = canvas.toDataURL('image/png', 1.0);
       const { jsPDF } = window.jspdf;
