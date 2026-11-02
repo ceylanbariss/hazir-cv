@@ -1293,11 +1293,17 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
       const pageWidthPx = 794; 
       const pageHeightPx = Math.ceil(pageWidthPx * 1.414);
       
+      // İçerik bir sayfayı en fazla %20 aşıyorsa ikinci sayfaya taşırmak yerine tek sayfaya sığdır.
+      clone.style.minHeight = '0';
+      const naturalHeight = clone.scrollHeight;
+      const fitOnePage = naturalHeight > pageHeightPx && naturalHeight <= pageHeightPx * 1.2;
+      if (!fitOnePage) clone.style.minHeight = '1123px';
+
       const sections = Array.from(clone.querySelectorAll('.animate-in > div'));
       const cloneRect = clone.getBoundingClientRect();
       const cloneLinks = Array.from(clone.querySelectorAll('.pdf-link'));
 
-      sections.forEach((section, idx) => {
+      if (!fitOnePage) sections.forEach((section, idx) => {
           if(idx === 0 && section.classList.contains('flex')) return;
 
           const rect = section.getBoundingClientRect();
@@ -1439,6 +1445,20 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
       let heightLeft = imgHeight;
       let position = 0;
       let pageIndex = 0;
+
+      if (fitOnePage) {
+        // Tek sayfa: görüntüyü sayfa yüksekliğine sığacak kadar orantılı küçült, yatayda ortala.
+        const f = Math.min(1, (pdfPageHeight * 0.99) / imgHeight);
+        const drawW = pdfPageWidth * f;
+        const offX = (pdfPageWidth - drawW) / 2;
+        pdf.addImage(imgData, 'PNG', offX, 0, drawW, imgHeight * f, undefined, 'FAST');
+        if (layerReady) drawTextLayerPage(pdf, textLines, { pxToMm: pdfScale * f, pageIndex: 0, pageHeightMm: pdfPageHeight, offsetX: offX });
+        linkLocations.forEach(link => {
+            if (!link.url) return;
+            pdf.link(offX + link.x * pdfScale * f, link.y * pdfScale * f, link.w * pdfScale * f, link.h * pdfScale * f, { url: encodeURI(link.url) });
+        });
+        heightLeft = 0;
+      }
 
       while (heightLeft > 10) {
         if (pageIndex > 0) pdf.addPage();
