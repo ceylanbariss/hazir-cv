@@ -11,6 +11,9 @@ import { runTask } from '../llm/runTask.js';
 import * as P from '../automation/prompts.js';
 import { buildMime } from '../automation/gmail.js';
 import { runForUser, listDueUsers, dayStart } from '../automation/worker.js';
+import { handleInboundEmail } from '../automation/alerts.js';
+import { sendDailySummary } from '../automation/summary.js';
+import { verifySvix } from '../automation/mailer.js';
 
 const uid = (req) => encodeURIComponent(req.user.id);
 const MAX_CVS = 3;
@@ -39,6 +42,7 @@ const PatchProfile = z
     portfolio_url: z.union([z.literal(''), z.url().max(300)]).optional(),
     setup_step: z.number().int().min(1).max(8).optional(),
     scan_hour: z.number().int().min(0).max(23).optional(),
+    daily_summary: z.boolean().optional(),
   })
   .strict();
 
@@ -85,7 +89,7 @@ const secretMatches = (given, expected) => {
 
 const pdfName = (fullName) => `${(fullName || 'CV').trim().replace(/\s+/g, '_')}_CV.pdf`;
 
-export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget, config = {}, gmail = null, sealer = null, search = null, readPage = null }) {
+export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget, config = {}, gmail = null, sealer = null, search = null, readPage = null, mailer = null }) {
   const router = express.Router();
   const json = express.json({ limit: '50kb' });
   const jsonUpload = express.json({ limit: '8mb' });
@@ -135,7 +139,29 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget,
   router.post('/internal/run/:userId', cronOnly, async (req, res) => {
     const userId = z.uuid().parse(req.params.userId);
     if (!workerReady) throw Errors.notConfigured();
-    res.json(await runWorker(userId, req.log));
+    const result = await runWorker(userId, req.log);
+    // Zamanlanmış taramadan sonra günlük özet (Hazır CV adresinden; anlatacak bir şey yoksa gitmez).
+    const summary = await sendDailySummary({ supabase, mailer, config, userId, log: req.log }).catch((err) => ({ sent: false, reason: err.message }));
+    res.json({ ...result, summary });
+  });
+
+  // Resend: <alert_code>@alarm.hazircv.com.tr adresine gelen e-posta. Webhook yalnızca kimlik taşır;
+  // içerik her zaman Resend API'sinden bizim anahtarımızla alınır. İmza sırrı tanımlıysa imza da doğrulanır.
+  router.post('/inbound/resend', express.raw({ type: '*/*', limit: '256kb' }), async (req, res) => {
+    if (!mailer) return res.status(503).json({ ok: false });
+    const body = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : '';
+    if (config.RESEND_WEBHOOK_SECRET) {
+      const ok = verifySvix({ id: req.get('svix-id'), timestamp: req.get('svix-timestamp'), signature: req.get('svix-signature'), body, secret: config.RESEND_WEBHOOK_SECRET });
+      if (!ok) return res.status(401).json({ ok: false });
+    }
+    let event;
+    try { event = JSON.parse(body); } catch { return res.status(400).json({ ok: false }); }
+    if (event?.type !== 'email.received' || !event.data?.email_id) return res.json({ ok: true, ignored: true });
+    res.json({ ok: true });
+    // Yanıt hemen döner; ayrıştırma ve puanlama arka planda sürer.
+    handleInboundEmail({ supabase, mailer, llm, budget, log: req.log, config, emailId: String(event.data.email_id) })
+      .then((r) => req.log.info('inbound_email', r))
+      .catch((err) => req.log.warn('inbound_email_failed', { error: err.message }));
   });
 
   router.use(rateLimit(limiter, 'automation'), requireUser(supabase));
@@ -362,6 +388,16 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget,
       clearInterval(beat);
       res.end();
     }
+  });
+
+  // ---- Yönlendirilen iş alarmlarından gelen ilanlar -------------------------------
+  router.get('/alerts', async (req, res) => {
+    const { profile } = await ensureProfile(req);
+    const items = await supabase.select(
+      'alert_jobs',
+      `user_id=eq.${uid(req)}&select=id,source,title,company,location,url,score,reason,received_at&order=received_at.desc,score.desc.nullslast&limit=100`,
+    );
+    res.json({ address: mailer && config.ALERT_DOMAIN ? `${profile.alert_code}@${config.ALERT_DOMAIN}` : null, items });
   });
 
   // ---- Gelen kutusu --------------------------------------------------------
