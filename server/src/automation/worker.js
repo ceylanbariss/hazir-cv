@@ -13,7 +13,13 @@ const STOP_CODES = new Set(['DAILY_CAPACITY_REACHED']);
 const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
 const enc = encodeURIComponent;
 
-export const dayStart = (now) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+// Türkiye saati (UTC+3, yaz saati uygulaması yok). "Bugün" Türkiye'de gece yarısı başlar.
+const TR_OFFSET_MS = 3 * 3600 * 1000;
+export const trHour = (now) => new Date(now.getTime() + TR_OFFSET_MS).getUTCHours();
+export const dayStart = (now) => {
+  const tr = new Date(now.getTime() + TR_OFFSET_MS);
+  return new Date(Date.UTC(tr.getUTCFullYear(), tr.getUTCMonth(), tr.getUTCDate()) - TR_OFFSET_MS).toISOString();
+};
 
 /** Normalises the signature and paragraphing of a generated cover letter. */
 export function fixLetter(text, fullName) {
@@ -61,9 +67,22 @@ async function mapLimit(items, limit, fn) {
   return out;
 }
 
-export async function listDueUsers(supabase) {
-  const rows = await supabase.select('profiles', 'setup_step=gte.6&status=neq.paused&select=id');
-  return rows.map((r) => r.id);
+/**
+ * Saatlik tetikte çalışacak kullanıcılar: tarama saati gelmiş (ya da geçmiş, kaçırılan çalışmalar için)
+ * olanlar. Bugün zaten çalışmış olanları runForUser kendisi atlar.
+ */
+export async function listDueUsers(supabase, now = new Date()) {
+  let rows;
+  try {
+    rows = await supabase.select('profiles', 'setup_step=gte.6&status=neq.paused&select=id,scan_hour');
+  } catch {
+    rows = await supabase.select('profiles', 'setup_step=gte.6&status=neq.paused&select=id'); // sütun henüz eklenmemişse
+  }
+  const hour = trHour(now);
+  const ran = new Set(
+    (await supabase.select('run_logs', `started_at=gte.${encodeURIComponent(dayStart(now))}&select=user_id`)).map((r) => r.user_id),
+  );
+  return rows.filter((r) => (r.scan_hour ?? 9) <= hour && !ran.has(r.id)).map((r) => r.id);
 }
 
 const REASONS = {
