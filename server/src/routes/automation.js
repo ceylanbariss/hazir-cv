@@ -38,6 +38,7 @@ const PatchProfile = z
     open_applications: z.boolean().optional(),
     portfolio_url: z.union([z.literal(''), z.url().max(300)]).optional(),
     setup_step: z.number().int().min(1).max(8).optional(),
+    scan_hour: z.number().int().min(0).max(23).optional(),
   })
   .strict();
 
