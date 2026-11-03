@@ -1,6 +1,6 @@
 // Faz 2: onay bekleyen başvurular, gönderilenler, Gmail bağlantısı ve elle tarama.
 import React, { useCallback, useEffect, useState } from 'react';
-import { listApplications, updateApplication, sendApplication, getGmail, connectGmail, disconnectGmail, runNowStream } from '../../lib/automationApi.js';
+import { listApplications, updateApplication, sendApplication, getGmail, connectGmail, disconnectGmail, runNowStream, listAlerts, updateMe } from '../../lib/automationApi.js';
 import { Spinner } from '../../hz/ui.jsx';
 
 const fmt = (iso) => new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
@@ -247,9 +247,82 @@ export function SentView() {
   );
 }
 
+// ---- İş alarmlarından gelen ilanlar ------------------------------------------------
+const SOURCE = { linkedin: 'LinkedIn', kariyer: 'Kariyer.net', other: 'İş alarmı' };
+
+function CopyAddress({ address }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(address); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { /* elle kopyalanır */ }
+  };
+  return (
+    <div className="hz-alert-address">
+      <code>{address}</code>
+      <button type="button" className="hz-btn hz-btn-sm" onClick={copy}>{copied ? 'Kopyalandı' : 'Kopyala'}</button>
+    </div>
+  );
+}
+
+function AlertSetup({ address, open }) {
+  return (
+    <details className="hz-alert-setup" open={open}>
+      <summary>LinkedIn ve Kariyer.net alarmlarını nasıl bağlarım?</summary>
+      <p className="hz-small">Bu adres sana özel. Alarm e-postalarını buraya yönlendirdiğinde asistan ilanları CV'ne göre puanlar. Bu sitelere otomatik başvuru yapılmaz; uygun ilana sen gidip başvurursun.</p>
+      <CopyAddress address={address} />
+      <ol className="hz-steps">
+        <li>LinkedIn'de (İşler → İş alarmları) ve Kariyer.net'te aradığın pozisyon için e-posta alarmı kur.</li>
+        <li>Gmail'de <strong>Ayarlar → Tüm ayarları görüntüle → Yönlendirme ve POP/IMAP → Yönlendirme adresi ekle</strong>'ye yukarıdaki adresi yaz.</li>
+        <li>Gmail bu adrese bir onay e-postası gönderir. Onay bağlantısı ve kodu birkaç dakika içinde <strong>Gelen kutusu</strong> sekmesine düşer; bağlantıyı aç.</li>
+        <li>Tüm yazılarını değil yalnızca alarmları yönlendirmek için Gmail'de bir filtre oluştur: <em>Kimden</em> alanına <code>jobalerts-noreply@linkedin.com OR kariyer.net</code> yaz, "Filtre oluştur"a bas ve <strong>"Şu adrese yönlendir"</strong> seçeneğinde bu adresi seç. Yönlendirmeyi genel olarak açmana gerek yok.</li>
+      </ol>
+    </details>
+  );
+}
+
+export function ListingsView() {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => { listAlerts().then(setData).catch((e) => setErr(e.message)); }, []);
+  if (err) return <p className="hz-notice" role="alert" style={{ margin: '0 26px 26px' }}>{err}</p>;
+  if (!data) return <Spinner />;
+  if (!data.address) return <div className="hz-empty"><p>LinkedIn ve Kariyer.net alarmlarını bağlama özelliği çok yakında açılacak.</p></div>;
+  return (
+    <div className="hz-listings">
+      <div style={{ padding: '0 26px 18px' }}><AlertSetup address={data.address} open={!data.items.length} /></div>
+      {!data.items.length ? (
+        <div className="hz-empty"><p>Henüz yönlendirilen ilan yok. Alarm e-postaları gelmeye başlayınca ilanlar puanlarıyla burada görünecek.</p></div>
+      ) : (
+        <ul className="hz-apps">
+          {data.items.map((j) => (
+            <li key={j.id} className="hz-app">
+              <div className="hz-app-head">
+                <h3>{j.title}</h3>
+                {j.score != null && <span className="hz-score" title="CV'ne uygunluk puanı">{j.score}</span>}
+                <p>{[j.company, j.location, SOURCE[j.source] || j.source, fmt(j.received_at)].filter(Boolean).join(' · ')}</p>
+              </div>
+              {j.reason && <p className="hz-small">{j.reason}</p>}
+              <a className="hz-source" href={j.url} target="_blank" rel="noreferrer noopener">
+                <span className="hz-source-label">İlana git</span>
+                <span className="hz-source-url">{shortUrl(j.url)}</span>
+                <span aria-hidden="true">↗</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 // ---- Ayarlar ------------------------------------------------------------------
-export function SettingsView({ gmail, reloadGmail, onConnect, onEditSetup, scanHour = 9 }) {
+export function SettingsView({ gmail, reloadGmail, onConnect, onEditSetup, scanHour = 9, dailySummary = true, email }) {
   const [busy, setBusy] = useState(false);
+  const [summary, setSummary] = useState(dailySummary !== false);
+  const [summaryErr, setSummaryErr] = useState(null);
+  const toggleSummary = async (on) => {
+    setSummary(on); setSummaryErr(null);
+    try { await updateMe({ daily_summary: on }); } catch (e) { setSummary(!on); setSummaryErr(e.message); }
+  };
   const [err, setErr] = useState(null);
   const disconnect = async () => {
     setBusy(true); setErr(null);
@@ -277,6 +350,14 @@ export function SettingsView({ gmail, reloadGmail, onConnect, onEditSetup, scanH
           </>
         )}
         {err && <p className="hz-notice" role="alert">{err}</p>}
+      </section>
+      <section>
+        <h3 className="hz-h3">Günlük özet e-postası</h3>
+        <label className="hz-check">
+          <input type="checkbox" checked={summary} onChange={(e) => toggleSummary(e.target.checked)} />
+          <span>Her gün taramadan sonra onay bekleyen başvuruları ve iş alarmlarından gelen uygun ilanları {email ? <strong>{email}</strong> : 'e-posta adresime'} gönder. Yeni bir şey yoksa e-posta gelmez.</span>
+        </label>
+        {summaryErr && <p className="hz-notice" role="alert">{summaryErr}</p>}
       </section>
       <section>
         <h3 className="hz-h3">Hedefler ve tercihler</h3>

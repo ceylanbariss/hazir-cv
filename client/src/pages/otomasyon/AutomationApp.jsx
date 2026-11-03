@@ -6,7 +6,7 @@ import { getMe, updateMe, getInbox, markInboxRead } from '../../lib/automationAp
 import { navigate } from '../../router.js';
 import { Shell, TopBar, Footer, Spinner } from '../../hz/ui.jsx';
 import Wizard from './Wizard.jsx';
-import { PendingView, SentView, SettingsView, useGmail, startGmailConnect, gmailReturnMessage } from './Applications.jsx';
+import { PendingView, SentView, SettingsView, ListingsView, useGmail, startGmailConnect, gmailReturnMessage } from './Applications.jsx';
 
 const go = (path) => (e) => { e.preventDefault(); navigate(path); };
 
@@ -93,6 +93,12 @@ const TABS = [
   ['settings', 'Ayarlar'],
 ];
 
+/** Body text with plain URLs turned into links (e.g. Gmail forwarding confirmation). */
+const linkify = (text) =>
+  String(text).split(/(https:\/\/[^\s]+)/g).map((part, i) =>
+    /^https:\/\//.test(part) ? <a key={i} href={part} target="_blank" rel="noreferrer noopener">bağlantıyı aç</a> : part,
+  );
+
 const fmt = (iso) => new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
 
 export function InboxList({ items }) {
@@ -103,7 +109,7 @@ export function InboxList({ items }) {
         <li key={i.id} className="hz-letter" data-unread={!i.read_at || undefined}>
           <h3>{i.title}</h3>
           <time dateTime={i.created_at}>{fmt(i.created_at)}</time>
-          {i.body && <p>{i.body}</p>}
+          {i.body && <p>{linkify(i.body)}</p>}
         </li>
       ))}
     </ul>
@@ -195,8 +201,8 @@ export function Panel({ profile, unread, setUnread, onSignOut, onStartSetup, inb
             {tab === 'inbox' && (inbox ? <InboxList items={inbox} /> : <InboxView onRead={onRead} />)}
             {tab === 'today' && (profile.setup_step >= 6 ? <PendingView gmail={gmail} onConnect={onConnect} /> : <Later text="Kurulumu tamamladığında her gün hazırlanan başvurular burada onayını bekleyecek." />)}
             {tab === 'applications' && <SentView />}
-            {tab === 'listings' && <Later text="LinkedIn ve Kariyer.net alarmlarından gelen ilanlar burada puanlarıyla görünecek." />}
-            {tab === 'settings' && <SettingsView gmail={gmail} reloadGmail={reloadGmail} onConnect={onConnect} onEditSetup={onStartSetup} scanHour={profile.scan_hour ?? 9} />}
+            {tab === 'listings' && <ListingsView />}
+            {tab === 'settings' && <SettingsView gmail={gmail} reloadGmail={reloadGmail} onConnect={onConnect} onEditSetup={onStartSetup} scanHour={profile.scan_hour ?? 9} dailySummary={profile.daily_summary} email={profile.email} />}
           </section>
         </div>
       </main>
