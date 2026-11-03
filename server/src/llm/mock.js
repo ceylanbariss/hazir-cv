@@ -94,6 +94,18 @@ const handlers = {
     });
   },
 
+  score_alert_jobs(text) {
+    const lines = between(text, 'jobs').split('\n').filter((l) => /^\d+:/.test(l));
+    return respond({
+      items: lines.map((l) => {
+        const [head, ctx = ''] = l.split(' | ');
+        const i = Number(head.split(':')[0]);
+        const [company = '', location = ''] = ctx.split(' · ').map((x) => x.trim());
+        return { i, company, location, score: /analist/i.test(head) ? 80 : 30, reason: 'Mock puan.' };
+      }),
+    });
+  },
+
   classify_document(text) {
     const cv = between(text, 'cv');
     const signals = [/@/, /deneyim|experience/i, /eğitim|education/i, /\+?\d[\d\s]{8,}/].filter((r) => r.test(cv)).length;
