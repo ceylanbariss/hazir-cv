@@ -43,6 +43,7 @@ export const listApplications = (status) => request(`/applications${status ? `?s
 export const updateApplication = (id, patch) => request(`/applications/${id}`, { method: 'PATCH', body: patch });
 export const sendApplication = (id) => request(`/applications/${id}/send`, { method: 'POST' });
 export const runNow = () => request('/run', { method: 'POST' });
+export const listAlerts = () => request('/alerts');
 
 /** Starts today's scan and streams its steps: onEvent({ type: 'progress' | 'result' | 'error', ... }). */
 export async function runNowStream(onEvent) {
