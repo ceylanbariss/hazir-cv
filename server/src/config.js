@@ -64,6 +64,11 @@ const EnvSchema = z.object({
   // İlan araması (ikisi de isteğe bağlı; önce Tavily, kota/hata olursa SerpApi).
   TAVILY_API_KEY: z.string().optional(),
   SERPAPI_KEY: z.string().optional(),
+  // Hazır CV'nin kendi e-postaları (Resend): günlük özet ve yönlendirilen iş alarmları.
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_WEBHOOK_SECRET: z.string().optional(),
+  MAIL_FROM: z.string().default('Hazır CV <bildirim@hazircv.com.tr>'),
+  ALERT_DOMAIN: z.string().default('alarm.hazircv.com.tr'),
   SEARCHES_PER_USER: z.coerce.number().int().min(1).max(10).default(4),
   PAGES_PER_USER: z.coerce.number().int().min(1).max(30).default(10),
   // Ücretsiz Gemini katmanı dakikada ~15 istek; işçi çağrılar arasında bu kadar bekler.
@@ -86,7 +91,7 @@ export function loadConfig(env = process.env) {
   }
   // Tolerate keys pasted with quotes/whitespace in hosting dashboards.
   if (cfg.GEMINI_API_KEY) cfg.GEMINI_API_KEY = cfg.GEMINI_API_KEY.replace(/['"]/g, '').trim();
-  for (const k of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'TOKEN_ENC_KEY', 'CRON_SECRET', 'TAVILY_API_KEY', 'SERPAPI_KEY']) {
+  for (const k of ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'TOKEN_ENC_KEY', 'CRON_SECRET', 'TAVILY_API_KEY', 'SERPAPI_KEY', 'RESEND_API_KEY', 'RESEND_WEBHOOK_SECRET']) {
     if (cfg[k]) cfg[k] = cfg[k].replace(/['"]/g, '').trim();
   }
   if (cfg.SUPABASE_URL) cfg.SUPABASE_URL = cfg.SUPABASE_URL.replace(/\/$/, '');
@@ -94,6 +99,7 @@ export function loadConfig(env = process.env) {
     throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set together.');
   }
   cfg.automationEnabled = Boolean(cfg.SUPABASE_URL);
+  cfg.mailEnabled = Boolean(cfg.RESEND_API_KEY);
   cfg.gmailEnabled = Boolean(cfg.GOOGLE_CLIENT_ID && cfg.GOOGLE_CLIENT_SECRET && cfg.TOKEN_ENC_KEY);
   cfg.API_PUBLIC_URL = cfg.API_PUBLIC_URL.replace(/\/$/, '');
   cfg.APP_URL = cfg.APP_URL.replace(/\/$/, '');

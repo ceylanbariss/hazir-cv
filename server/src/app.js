@@ -10,6 +10,7 @@ import { createGmail } from './automation/gmail.js';
 import { createSealer } from './automation/crypto.js';
 import { createSearch } from './automation/search.js';
 import { createPageReader } from './automation/pages.js';
+import { createMailer } from './automation/mailer.js';
 
 const HOUR = 60 * 60 * 1000;
 
@@ -17,7 +18,7 @@ const HOUR = 60 * 60 * 1000;
  * Builds the Express app. Dependencies are injected so tests can run the real
  * HTTP stack against a mock LLM.
  */
-export function createApp({ config, llm, logger, budget, semaphore, limiters, supabase, gmail, search, readPage } = {}) {
+export function createApp({ config, llm, logger, budget, semaphore, limiters, supabase, gmail, search, readPage, mailer } = {}) {
   const deps = {
     config,
     llm,
@@ -62,6 +63,7 @@ export function createApp({ config, llm, logger, budget, semaphore, limiters, su
         sealer,
         search: search || createSearch({ tavilyKey: config.TAVILY_API_KEY, serpKey: config.SERPAPI_KEY, log: logger }),
         readPage: readPage || createPageReader(),
+        mailer: mailer || (config.mailEnabled ? createMailer({ apiKey: config.RESEND_API_KEY, from: config.MAIL_FROM }) : null),
       }),
     );
   } else {
