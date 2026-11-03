@@ -45,7 +45,7 @@ export function Privacy() {
       <p>Verilerini yalnızca sana uygun ilanları bulmak, ilana özel ön yazı hazırlamak, onayınla ya da seçtiğin otomatik modda başvuru e-postası göndermek ve sana günlük özet sunmak için kullanırız. Verilerini satmayız, reklam için kullanmayız ve yapay zeka modellerini eğitmek için kimseyle paylaşmayız.</p>
 
       <h2>Google kullanıcı verileri</h2>
-      <p>Hazır CV'nin Google API'lerinden aldığı bilgileri kullanması ve başka uygulamalara aktarması, sınırlı kullanım (Limited Use) koşulları dahil olmak üzere Google API Hizmetleri Kullanıcı Verileri Politikası'na uygundur. Gmail iznini yalnızca senin adına başvuru e-postası göndermek için kullanırız; gelen kutunu okumayız.</p>
+      <p>Hazır CV'nin Google API'lerinden aldığı bilgileri kullanması ve başka uygulamalara aktarması, sınırlı kullanım (Limited Use) koşulları dahil olmak üzere <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer">Google API Hizmetleri Kullanıcı Verileri Politikası</a>'na uygundur. Gmail iznini yalnızca senin adına başvuru e-postası göndermek için kullanırız; gelen kutunu okumayız.</p>
 
       <h2>Hizmet sağlayıcılar</h2>
       <ul>
