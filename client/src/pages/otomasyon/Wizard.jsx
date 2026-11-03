@@ -273,6 +273,13 @@ function StepPrefs({ p, set }) {
           </div>
         </div>
         <div className="hz-field">
+          <label className="hz-label" htmlFor="scanhour">Günlük tarama saati</label>
+          <select id="scanhour" className="hz-input" value={p.scan_hour} onChange={(e) => set({ scan_hour: Number(e.target.value) })}>
+            {Array.from({ length: 18 }, (_, i) => i + 6).map((h) => <option key={h} value={h}>{String(h).padStart(2, '0')}:00</option>)}
+          </select>
+          <span className="hz-hint">Asistan her gün bu saatte yeni ilanları tarar (Türkiye saati).</span>
+        </div>
+        <div className="hz-field">
           <label className="hz-label" htmlFor="cooldown">Aynı şirkete tekrar yazma</label>
           <select id="cooldown" className="hz-input" value={p.company_cooldown_days} onChange={(e) => set({ company_cooldown_days: Number(e.target.value) })}>
             {[15, 30, 60, 90].map((d) => <option key={d} value={d}>{d} gün sonra</option>)}
@@ -310,7 +317,7 @@ export default function Wizard({ profile, onExit, onDone }) {
         setCvs(d.cvs);
         const seniority = d.cvs.find((c) => c.is_default)?.extracted_profile?.seniority;
         setT(d.targets || { roles: [], excluded: [], cities: [], work_modes: ['remote', 'hybrid'], seniority: seniority ? [seniority] : ['junior'], long_term_internship: true });
-        setP({ mode: d.profile.mode, daily_limit: d.profile.daily_limit, company_cooldown_days: d.profile.company_cooldown_days, open_applications: d.profile.open_applications, portfolio_url: d.profile.portfolio_url || '' });
+        setP({ mode: d.profile.mode, daily_limit: d.profile.daily_limit, company_cooldown_days: d.profile.company_cooldown_days, open_applications: d.profile.open_applications, portfolio_url: d.profile.portfolio_url || '', scan_hour: d.profile.scan_hour ?? 9 });
       })
       .catch((e) => setErr(e.message));
   }, []);

@@ -196,7 +196,7 @@ export function Panel({ profile, unread, setUnread, onSignOut, onStartSetup, inb
             {tab === 'today' && (profile.setup_step >= 6 ? <PendingView gmail={gmail} onConnect={onConnect} /> : <Later text="Kurulumu tamamladığında her gün hazırlanan başvurular burada onayını bekleyecek." />)}
             {tab === 'applications' && <SentView />}
             {tab === 'listings' && <Later text="LinkedIn ve Kariyer.net alarmlarından gelen ilanlar burada puanlarıyla görünecek." />}
-            {tab === 'settings' && <SettingsView gmail={gmail} reloadGmail={reloadGmail} onConnect={onConnect} onEditSetup={onStartSetup} />}
+            {tab === 'settings' && <SettingsView gmail={gmail} reloadGmail={reloadGmail} onConnect={onConnect} onEditSetup={onStartSetup} scanHour={profile.scan_hour ?? 9} />}
           </section>
         </div>
       </main>

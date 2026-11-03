@@ -248,7 +248,7 @@ export function SentView() {
 }
 
 // ---- Ayarlar ------------------------------------------------------------------
-export function SettingsView({ gmail, reloadGmail, onConnect, onEditSetup }) {
+export function SettingsView({ gmail, reloadGmail, onConnect, onEditSetup, scanHour = 9 }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const disconnect = async () => {
@@ -280,7 +280,7 @@ export function SettingsView({ gmail, reloadGmail, onConnect, onEditSetup }) {
       </section>
       <section>
         <h3 className="hz-h3">Hedefler ve tercihler</h3>
-        <p className="hz-small">CV'lerin, roller, şehirler, günlük limit ve şirket bekleme süresi kurulumda. Asistan her sabah 09:00 civarında çalışır.</p>
+        <p className="hz-small">CV'lerin, roller, şehirler, günlük limit ve şirket bekleme süresi kurulumda. Asistan her gün {String(scanHour).padStart(2, '0')}:00 civarında yeni ilanları tarar.</p>
         <div><button type="button" className="hz-btn hz-btn-sm" onClick={onEditSetup}>Kurulumu düzenle</button></div>
       </section>
     </div>
