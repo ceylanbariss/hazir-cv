@@ -11,7 +11,7 @@ import { createSealer } from '../src/automation/crypto.js';
 import { buildMime, encodeHeader } from '../src/automation/gmail.js';
 import { dailyQueries } from '../src/automation/search.js';
 import { validEmails, isPublicUrl, emailsIn, rootName, shouldSkip } from '../src/automation/pages.js';
-import { checkVerdict, fixLetter } from '../src/automation/worker.js';
+import { checkVerdict, fixLetter, listDueUsers, dayStart, trHour } from '../src/automation/worker.js';
 
 const UID = '22222222-2222-4222-8222-222222222222';
 const USERS = { 'tok-b': { id: UID, email: 'b@x.com', user_metadata: { full_name: 'Barış Deneme' } } };
@@ -109,7 +109,7 @@ before(async () => {
   base = `http://127.0.0.1:${server.address().port}/api/v1/automation`;
 
   // Kurulumu tamamlanmış bir kullanıcı
-  sb.db.profiles.push({ id: UID, email: 'b@x.com', full_name: 'Barış Deneme', mode: 'approval', daily_limit: 10, company_cooldown_days: 30, open_applications: true, status: 'setup', setup_step: 6, kvkk_accepted_at: new Date().toISOString() });
+  sb.db.profiles.push({ id: UID, email: 'b@x.com', full_name: 'Barış Deneme', mode: 'approval', daily_limit: 10, company_cooldown_days: 30, open_applications: true, status: 'setup', setup_step: 6, scan_hour: 0, kvkk_accepted_at: new Date().toISOString() });
   sb.db.cvs.push({ id: 'cv-1', user_id: UID, label: 'Ana CV', storage_path: `${UID}/cv-1.pdf`, is_default: true, extracted_profile: { full_name: 'Barış Deneme', skills: ['SQL'] }, created_at: new Date().toISOString() });
   sb.db.targets.push({ user_id: UID, roles: ['İş Analisti'], excluded: [], cities: ['Ankara'], work_modes: ['remote', 'hybrid'], seniority: ['junior'], long_term_internship: true });
 });
@@ -280,5 +280,22 @@ test('manual scan streams live progress lines and a final result', async () => {
   const result = lines.at(-1);
   assert.equal(result.type, 'result');
   assert.equal(result.drafted, 1);
+});
+
+test('due users follow their scan hour in Turkey time and run once a day', async () => {
+  const fake = fakeSupabase();
+  fake.db.profiles.push(
+    { id: 'u-early', setup_step: 6, status: 'active', scan_hour: 7 },
+    { id: 'u-late', setup_step: 6, status: 'active', scan_hour: 20 },
+    { id: 'u-paused', setup_step: 6, status: 'paused', scan_hour: 7 },
+    { id: 'u-setup', setup_step: 3, status: 'setup', scan_hour: 7 },
+  );
+  const at = new Date('2026-11-03T06:30:00Z'); // 09:30 Türkiye
+  assert.equal(trHour(at), 9);
+  assert.equal(dayStart(at), '2026-11-02T21:00:00.000Z');
+  assert.deepEqual(await listDueUsers(fake, at), ['u-early']);
+  fake.db.run_logs.push({ id: 'r1', user_id: 'u-early', started_at: '2026-11-03T04:00:00.000Z' });
+  assert.deepEqual(await listDueUsers(fake, at), []);
+  assert.deepEqual(await listDueUsers(fake, new Date('2026-11-03T17:05:00Z')), ['u-late']);
 });
 
