@@ -56,6 +56,8 @@ const EnvSchema = z.object({
   // Faz 2: Gmail ile gönderim (Google OAuth istemcisi) ve refresh token şifreleme anahtarı.
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
+  // Google doğrulaması için dönüş adresi kendi alan adımızda olmalı (Vercel bunu sunucuya iletir).
+  GOOGLE_REDIRECT_URI: z.string().url().optional(),
   TOKEN_ENC_KEY: z.string().optional(),
   // Günlük işçi: GitHub Actions bu sırla /internal uçlarını çağırır.
   CRON_SECRET: z.string().optional(),
