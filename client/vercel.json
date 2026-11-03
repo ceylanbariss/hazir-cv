@@ -1,3 +1,6 @@
 {
-  "rewrites": [{ "source": "/((?!assets/|.*\\.).*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/api/v1/automation/gmail/callback", "destination": "https://resumatch-backend-zsmt.onrender.com/api/v1/automation/gmail/callback" },
+    { "source": "/((?!assets/|.*\\.).*)", "destination": "/index.html" }
+  ]
 }
