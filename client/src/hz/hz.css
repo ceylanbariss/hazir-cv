@@ -400,3 +400,12 @@
 .hz-choice-off .hz-choice-art, .hz-choice-off .hz-choice-body h3, .hz-choice-off .hz-choice-body p { opacity: .55; }
 .hz-link.hz-soon .hz-soon-note { justify-content: flex-end; }
 .hz-choice-off .hz-btn.hz-soon { min-width: 232px; box-shadow: none !important; transform: none !important; }
+
+/* İş alarmları (İlanlar sekmesi) */
+.hz-alert-setup { border: 1.5px solid var(--cizgi); border-radius: 3px; background: #fff; padding: 14px 16px; display: grid; gap: 12px; }
+.hz-alert-setup summary { cursor: pointer; font-family: var(--f-ui); font-weight: 700; font-size: 15px; }
+.hz-alert-setup[open] summary { margin-bottom: 4px; }
+.hz-alert-address { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.hz-alert-address code { font-size: 15px; padding: 8px 12px; background: var(--posta-acik); border-radius: 3px; word-break: break-all; }
+.hz-steps { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 15px; }
+.hz-steps code { font-size: 13px; background: var(--posta-acik); padding: 1px 4px; border-radius: 2px; }
