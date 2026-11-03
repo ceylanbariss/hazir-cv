@@ -47,7 +47,7 @@ export function createApp({ config, llm, logger, budget, semaphore, limiters, su
     const mail =
       gmail ||
       (config.gmailEnabled
-        ? createGmail({ clientId: config.GOOGLE_CLIENT_ID, clientSecret: config.GOOGLE_CLIENT_SECRET, redirectUri: `${config.API_PUBLIC_URL}/api/v1/automation/gmail/callback` })
+        ? createGmail({ clientId: config.GOOGLE_CLIENT_ID, clientSecret: config.GOOGLE_CLIENT_SECRET, redirectUri: config.GOOGLE_REDIRECT_URI || `${config.API_PUBLIC_URL}/api/v1/automation/gmail/callback` })
         : null);
     app.use(
       '/api/v1/automation',
