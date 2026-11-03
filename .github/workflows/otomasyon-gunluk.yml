@@ -1,12 +1,12 @@
-# Başvuru otomasyonu günlük işçisi: her sabah Render'daki sunucuyu uyandırır ve
-# kurulumu tamamlamış her kullanıcı için taramayı sırayla çalıştırır (onaylı mod:
+# Başvuru otomasyonu işçisi: her saat Render'daki sunucuyu uyandırır ve tarama saati gelen
+# (kurulumda seçilen saat) her kullanıcı için taramayı sırayla çalıştırır (onaylı mod:
 # hiçbir e-posta otomatik gönderilmez, yalnızca onay bekleyen taslaklar hazırlanır).
 # Gerekli repo sırrı: CRON_SECRET (Render'daki CRON_SECRET ile aynı değer).
-name: Otomasyon günlük tarama
+name: Otomasyon günlük tarama (saatlik kontrol)
 
 on:
   schedule:
-    - cron: '17 6 * * *' # 06:17 UTC = 09:17 Türkiye
+    - cron: '7 * * * *' # her saat başı: o saatte tarama zamanı gelen kullanıcılar çalışır
   workflow_dispatch:
 
 concurrency:
