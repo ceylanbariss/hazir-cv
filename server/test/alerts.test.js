@@ -138,9 +138,10 @@ test('svix signatures: valid, tampered, expired', () => {
 });
 
 test('summary e-mail lists pending applications and alert jobs, HTML-escaped', () => {
-  const m = buildSummary({ name: 'Ceren Deneme', appUrl: 'https://hazircv.com.tr', pending: [{ company: 'Atlas <b>', position: 'İş Analisti', score: 82 }], alerts: [{ title: 'Veri Analisti', company: 'Nova', score: 75, url: 'https://www.linkedin.com/jobs/view/1/', source: 'linkedin' }] });
+  const m = buildSummary({ name: 'Ceren Deneme', appUrl: 'https://hazircv.com.tr', stats: { searches: 4, pages: 12, drafted: 1 }, pending: [{ company: 'Atlas <b>', position: 'İş Analisti', score: 82 }], alerts: [{ title: 'Veri Analisti', company: 'Nova', score: 75, url: 'https://www.linkedin.com/jobs/view/1/', source: 'linkedin' }] });
   assert.equal(m.subject, 'Hazır CV · 1 başvuru onayını bekliyor, 1 yeni ilan');
   assert.match(m.text, /Merhaba Ceren,/);
+  assert.match(m.text, /Bugünkü tarama: 4 arama, 12 sayfa incelendi, 1 başvuru hazırlandı\./);
   assert.match(m.text, /• Atlas <b> · İş Analisti \(82 puan\)/);
   assert.match(m.html, /Atlas &lt;b&gt;/);
   assert.doesNotMatch(m.html, /Atlas <b>/);
@@ -196,11 +197,12 @@ test('daily summary: sent once a day, only with news, respects the opt-out', asy
   const r1 = await sendDailySummary({ supabase: sb, mailer, config: cfg, userId: UID, now });
   assert.equal(r1.sent, true);
   assert.equal(r1.pending, 1);
-  assert.equal(r1.alerts, 1); // İş Analisti (80) geçer, Satış (30) eşiğin altında
+  assert.equal(r1.alerts, 2); // hepsi listelenir: uygun olanlar üstte, diğerleri ayrı başlıkta
   const mail = mailer.sent.at(-1);
   assert.equal(mail.to, 'c@x.com');
   assert.match(mail.text, /İş Analisti – Atlas Yazılım \(80 puan\)/);
-  assert.doesNotMatch(mail.text, /Satış Temsilcisi/);
+  assert.match(mail.text, /Diğer ilanlar:\n• Satış Temsilcisi – Kuzey A\.Ş\. \(30 puan\)/);
+  assert.ok(mail.text.indexOf('İş Analisti') < mail.text.indexOf('Satış Temsilcisi'));
   assert.equal((await sendDailySummary({ supabase: sb, mailer, config: cfg, userId: UID, now })).reason, 'already_sent');
 
   sb.db.inbox_items = sb.db.inbox_items.filter((i) => i.kind !== 'daily_summary');
