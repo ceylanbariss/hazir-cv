@@ -365,7 +365,7 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget,
     res.json({ application: updated });
   });
 
-  // Kullanıcının kendi taramasını elle başlatması (günde bir kez; zamanlanmış çalışmayla aynı kural).
+  // Kullanıcının kendi taramasını elle başlatması (günde en fazla RUNS_PER_DAY; zamanlanmış çalışmayla ortak sayılır).
   // ?stream=1 → adımlar canlı olarak NDJSON satırları halinde akar ({type:'progress'|'result'|'error'}).
   router.post('/run', heavy, async (req, res) => {
     if (!workerReady) throw Errors.notConfigured();
