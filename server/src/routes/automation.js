@@ -141,7 +141,7 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget,
     if (!workerReady) throw Errors.notConfigured();
     const result = await runWorker(userId, req.log);
     // Zamanlanmış taramadan sonra günlük özet (Hazır CV adresinden; anlatacak bir şey yoksa gitmez).
-    const summary = await sendDailySummary({ supabase, mailer, config, userId, log: req.log }).catch((err) => ({ sent: false, reason: err.message }));
+    const summary = await sendDailySummary({ supabase, mailer, config, userId, log: req.log, stats: result.status === 'ok' ? result : null }).catch((err) => ({ sent: false, reason: err.message }));
     res.json({ ...result, summary });
   });
 
