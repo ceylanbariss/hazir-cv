@@ -151,6 +151,8 @@ test('daily queries rotate and respect work modes', () => {
   assert.equal(a.length, 3);
   assert.ok(a.every((q) => q.includes('Ankara')));
   assert.notDeepEqual(a, b);
+  const a2 = dailyQueries(t, { count: 3, day: new Date('2026-10-27'), offset: 1 });
+  assert.equal(a2.filter((q) => a.includes(q)).length, 0); // aynı gün ikinci tarama farklı sorgular
   assert.ok(dailyQueries({ ...t, workModes: ['remote'] }, { count: 2 }).every((q) => q.includes('uzaktan')));
 });
 
@@ -184,7 +186,7 @@ test('internal endpoints require the cron secret', async () => {
   assert.deepEqual((await r.json()).users, [UID]);
 });
 
-test('worker drafts approval-pending applications and runs once per day', async () => {
+test('worker drafts approval-pending applications and runs at most three times a day', async () => {
   const r = await call(`/internal/run/${UID}`, { token: null, method: 'POST', headers: { 'x-cron-secret': SECRET } });
   assert.equal(r.status, 200);
   const j = await r.json();
@@ -200,8 +202,14 @@ test('worker drafts approval-pending applications and runs once per day', async 
   assert.equal(sb.db.run_logs.length, 1);
   assert.ok(sb.db.run_logs[0].finished_at);
 
-  const again = await (await call(`/internal/run/${UID}`, { token: null, method: 'POST', headers: { 'x-cron-secret': SECRET } })).json();
-  assert.equal(again.reason, 'already_ran_today');
+  assert.equal(j.runsToday, 1);
+  const run = async () => (await call(`/internal/run/${UID}`, { token: null, method: 'POST', headers: { 'x-cron-secret': SECRET } })).json();
+  assert.equal((await run()).runsToday, 2);
+  assert.equal((await run()).runsToday, 3);
+  assert.equal(sb.db.applications.length, 1); // aynı sayfalar tekrar taslağa dönmez
+  const fourth = await run();
+  assert.equal(fourth.reason, 'daily_runs_used');
+  assert.equal(sb.db.run_logs.length, 3);
 });
 
 test('lists pending applications and allows editing', async () => {
