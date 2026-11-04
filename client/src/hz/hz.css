@@ -407,5 +407,8 @@
 .hz-alert-setup[open] summary { margin-bottom: 4px; }
 .hz-alert-address { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
 .hz-alert-address code { font-size: 15px; padding: 8px 12px; background: var(--posta-acik); border-radius: 3px; word-break: break-all; }
-.hz-steps { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 15px; }
-.hz-steps code { font-size: 13px; background: var(--posta-acik); padding: 1px 4px; border-radius: 2px; }
+.hz-alert-setup .hz-steps { list-style: decimal; counter-reset: none; margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 15px; }
+.hz-alert-setup .hz-steps li { display: list-item; }
+.hz-alert-setup .hz-steps li::before { content: none; }
+.hz-alert-setup .hz-steps strong { display: inline; }
+.hz-alert-setup .hz-steps code { font-size: 13px; background: var(--posta-acik); padding: 1px 4px; border-radius: 2px; }
