@@ -98,8 +98,8 @@ function ScanLive({ events, pct, running, final }) {
 const resultMessage = (r) =>
   !r ? 'Tarama tamamlanamadı. Daha sonra tekrar dene.'
     : r.type === 'error' ? r.message
-      : r.status === 'ok' ? null
-        : r.reason === 'already_ran_today' ? 'Bugünkü tarama zaten yapıldı. Yeni ilanlar yarın sabah gelecek.'
+      : r.status === 'ok' ? (r.runsToday ? `Bugün ${r.runsToday}/${r.maxRuns || 3} tarama yapıldı.` : null)
+        : r.reason === 'daily_runs_used' || r.reason === 'already_ran_today' ? `Bugünkü ${r.maxRuns || 3} taramanın hepsi yapıldı. Yeni taramalar yarın açılacak.`
           : r.reason === 'already_running' ? 'Tarama şu an başka bir pencerede çalışıyor. Birkaç dakika sonra sayfayı yenile.'
             : r.reason === 'incomplete_setup' || r.reason === 'not_ready' ? 'Önce kurulumu tamamla.'
               : 'Tarama tamamlanamadı. Daha sonra tekrar dene.';
@@ -211,7 +211,12 @@ export function PendingView({ gmail, onConnect, onCountChange }) {
       {!items.length && !scan?.running && (
         <div className="hz-empty">
           <p>Onay bekleyen başvuru yok. Asistan her sabah yeni ilanları tarar ve uygun olanlar için ön yazı hazırlar.</p>
-          {!scan && <button type="button" className="hz-btn hz-btn-sm" onClick={startScan}>Bugünün taramasını şimdi yap</button>}
+        </div>
+      )}
+      {!scan?.running && (
+        <div style={{ padding: '0 26px 18px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <button type="button" className="hz-btn hz-btn-sm" onClick={startScan}>Şimdi tara</button>
+          <span className="hz-small">Günde en fazla 3 tarama yapılabilir; her tarama farklı aramalarla yeni ilanlara bakar.</span>
         </div>
       )}
       {items.length > 0 && (
