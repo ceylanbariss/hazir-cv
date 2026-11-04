@@ -72,7 +72,7 @@ const OPEN_TEMPLATES = [
 ];
 
 /** Today's slice of all role × place × template combinations (rotates daily so coverage grows over time). */
-export function dailyQueries({ roles = [], cities = [], workModes = [], openApplications = true }, { count = 4, day = new Date() } = {}) {
+export function dailyQueries({ roles = [], cities = [], workModes = [], openApplications = true }, { count = 4, day = new Date(), offset = 0 } = {}) {
   const places = [];
   if (workModes.some((m) => m !== 'remote')) places.push(...cities);
   if (workModes.includes('remote') || !places.length) places.push('uzaktan');
@@ -85,6 +85,7 @@ export function dailyQueries({ roles = [], cities = [], workModes = [], openAppl
   if (!unique.length) return [];
   const n = Math.min(count, unique.length);
   const ordinal = Math.floor(day.getTime() / 86_400_000);
-  const start = (ordinal * n) % unique.length;
+  // offset: aynı gün içindeki kaçıncı tarama — her biri bir sonraki dilime geçer, aynı sorgular tekrar aranmaz.
+  const start = ((ordinal * 3 + offset) * n) % unique.length;
   return Array.from({ length: n }, (_, i) => unique[(start + i) % unique.length]);
 }

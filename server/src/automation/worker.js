@@ -113,9 +113,11 @@ export async function runForUser({ supabase, llm, budget, search, readPage, log,
 
   const today = dayStart(now);
   if (!force) {
-    const ran = await supabase.select('run_logs', `user_id=eq.${uid}&started_at=gte.${enc(today)}&select=id`);
-    if (ran.length) return { status: 'skipped', reason: 'already_ran_today' };
   }
+  // Günde en fazla RUNS_PER_DAY tarama (zamanlanmış + elle toplam). Her tarama farklı arama dilimini kullanır.
+  const ranToday = (await supabase.select('run_logs', `user_id=eq.${uid}&started_at=gte.${enc(today)}&select=id`)).length;
+  const maxRuns = config.RUNS_PER_DAY || 3;
+  if (!force && ranToday >= maxRuns) return { status: 'skipped', reason: 'daily_runs_used', runsToday: ranToday, maxRuns };
 
   const [targets] = await supabase.select('targets', `user_id=eq.${uid}&select=*`);
   const cvs = await supabase.select('cvs', `user_id=eq.${uid}&select=id,label,is_default,extracted_profile&order=created_at.asc`);
@@ -147,7 +149,7 @@ export async function runForUser({ supabase, llm, budget, search, readPage, log,
     // 1) Arama
     const queries = dailyQueries(
       { roles: targets.roles, cities: targets.cities, workModes: targets.work_modes, openApplications: profile.open_applications },
-      { count: config.SEARCHES_PER_USER, day: now },
+      { count: config.SEARCHES_PER_USER, day: now, offset: ranToday },
     );
     const seenUrls = new Set();
     const hits = [];
@@ -263,7 +265,7 @@ export async function runForUser({ supabase, llm, budget, search, readPage, log,
       ]);
     }
     emit('done', stats.drafted ? `Bitti: ${stats.drafted} başvuru onayını bekliyor.` : 'Bitti: bugün sana uygun yeni ilan çıkmadı. Yarın sabah tekrar bakacağım.', 100);
-    return { status: 'ok', ...stats };
+    return { status: 'ok', ...stats, runsToday: ranToday + 1, maxRuns };
   } catch (err) {
     stats.errors.push(err.code || err.message);
     log?.error('worker_failed', { userId, error: err.message });
