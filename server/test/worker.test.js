@@ -10,8 +10,8 @@ import { createApp } from '../src/app.js';
 import { createSealer } from '../src/automation/crypto.js';
 import { buildMime, encodeHeader } from '../src/automation/gmail.js';
 import { dailyQueries } from '../src/automation/search.js';
-import { validEmails, isPublicUrl, emailsIn, rootName, shouldSkip } from '../src/automation/pages.js';
-import { checkVerdict, fixLetter, listDueUsers, dayStart, trHour } from '../src/automation/worker.js';
+import { validEmails, isPublicUrl, emailsIn, rootName, shouldSkip, createPageReader } from '../src/automation/pages.js';
+import { checkVerdict, fixLetter, listDueUsers, dayStart, trHour, autoSlots } from '../src/automation/worker.js';
 
 const UID = '22222222-2222-4222-8222-222222222222';
 const USERS = { 'tok-b': { id: UID, email: 'b@x.com', user_metadata: { full_name: 'Barış Deneme' } } };
@@ -210,6 +210,11 @@ test('worker drafts approval-pending applications and runs at most three times a
   const fourth = await run();
   assert.equal(fourth.reason, 'daily_runs_used');
   assert.equal(sb.db.run_logs.length, 3);
+  assert.deepEqual(sb.db.run_logs.map((r) => r.trigger), ['auto', 'auto', 'auto']);
+  const runs = await (await call('/runs')).json();
+  assert.equal(runs.items.length, 3);
+  assert.equal(runs.items.filter((r) => r.trigger === 'auto').length, 3);
+  assert.deepEqual(runs.autoHours, [0, 4, 8]);
 
   // Saatlik tetik (pg_cron): sırrı gerekmez, bugün taranmış kullanıcıyı tekrar çalıştırmaz, 5 dk'da bir kez çalışır.
   const t1 = await (await call('/internal/tick', { token: null, method: 'POST' })).json();
@@ -295,9 +300,13 @@ test('manual scan streams live progress lines and a final result', async () => {
   const result = lines.at(-1);
   assert.equal(result.type, 'result');
   assert.equal(result.drafted, 1);
+  assert.equal(result.trigger, 'manual'); // panelden başlatılan tarama 'Elle' olarak görünür
 });
 
-test('due users follow their scan hour in Turkey time and run once a day', async () => {
+test('due users: up to three automatic slots a day from the scan hour, manual scans count too', async () => {
+  assert.deepEqual(autoSlots(12), [12, 16, 20]);
+  assert.deepEqual(autoSlots(20), [20]);
+  assert.deepEqual(autoSlots(9, { runs: 1 }), [9]);
   const fake = fakeSupabase();
   fake.db.profiles.push(
     { id: 'u-early', setup_step: 6, status: 'active', scan_hour: 7 },
@@ -310,7 +319,36 @@ test('due users follow their scan hour in Turkey time and run once a day', async
   assert.equal(dayStart(at), '2026-11-02T21:00:00.000Z');
   assert.deepEqual(await listDueUsers(fake, at), ['u-early']);
   fake.db.run_logs.push({ id: 'r1', user_id: 'u-early', started_at: '2026-11-03T04:00:00.000Z' });
-  assert.deepEqual(await listDueUsers(fake, at), []);
-  assert.deepEqual(await listDueUsers(fake, new Date('2026-11-03T17:05:00Z')), ['u-late']);
+  assert.deepEqual(await listDueUsers(fake, at), []); // 07:00 dilimi yapıldı
+  assert.deepEqual(await listDueUsers(fake, new Date('2026-11-03T08:10:00Z')), ['u-early']); // 11:10 → ikinci dilim
+  fake.db.run_logs.push({ id: 'r2', user_id: 'u-early', started_at: '2026-11-03T07:00:00.000Z', trigger: 'manual' });
+  assert.deepEqual(await listDueUsers(fake, new Date('2026-11-03T08:10:00Z')), []); // elle tarama da sayılır
+  assert.deepEqual(await listDueUsers(fake, new Date('2026-11-03T17:05:00Z')), ['u-early', 'u-late']);
+  assert.deepEqual(await listDueUsers(fake, new Date('2026-11-03T17:05:00Z'), { runs: 1 }), ['u-late']);
 });
 
+
+test('page reader finds the HR address on the company career page when the listing has none', async () => {
+  const html = {
+    'https://firma.com.tr/blog/is-analisti': '<html><body><h1>İş Analisti arıyoruz</h1></body></html>',
+    'https://firma.com.tr/kariyer-firsatlari': '<html><body>Açık pozisyonlarımız. CV: <a href="mailto:kariyer@firma.com.tr">yaz</a></body></html>',
+    'https://firma.com.tr/iletisim': '<html><body>info@firma.com.tr</body></html>',
+  };
+  const asked = [];
+  const fetchImpl = async (url) => {
+    asked.push(url);
+    const body = html[url];
+    return { ok: !!body, status: body ? 200 : 404, headers: { get: (h) => (h === 'content-type' ? 'text/html' : null) }, text: async () => body || '' };
+  };
+  const read = createPageReader({ fetchImpl });
+  const page = await read({ url: 'https://firma.com.tr/blog/is-analisti', title: 'İş Analisti', snippet: '' });
+  assert.deepEqual(page.emails, ['kariyer@firma.com.tr']);
+  assert.match(page.text, /\[\/kariyer-firsatlari sayfasından\]/);
+  assert.ok(!asked.includes('https://firma.com.tr/iletisim')); // İK adresi bulununca durur
+
+  // Hiç alt sayfası olmayan sitede 5 denemeden sonra vazgeçer.
+  asked.length = 0;
+  const none = await read({ url: 'https://bos.com.tr/', title: '', snippet: '' });
+  assert.deepEqual(none.emails, []);
+  assert.equal(asked.length, 1 + 5);
+});

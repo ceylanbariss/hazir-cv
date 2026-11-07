@@ -141,7 +141,7 @@ test('summary e-mail lists pending applications and alert jobs, HTML-escaped', (
   const m = buildSummary({ name: 'Ceren Deneme', appUrl: 'https://hazircv.com.tr', stats: { searches: 4, pages: 12, drafted: 1 }, pending: [{ company: 'Atlas <b>', position: 'İş Analisti', score: 82 }], alerts: [{ title: 'Veri Analisti', company: 'Nova', score: 75, url: 'https://www.linkedin.com/jobs/view/1/', source: 'linkedin' }] });
   assert.equal(m.subject, 'Hazır CV · 1 başvuru onayını bekliyor, 1 yeni ilan');
   assert.match(m.text, /Merhaba Ceren,/);
-  assert.match(m.text, /Bugünkü tarama: 4 arama, 12 sayfa incelendi, 1 başvuru hazırlandı\./);
+  assert.match(m.text, /Son tarama: 4 arama, 12 sayfa incelendi, 1 başvuru hazırlandı\./);
   assert.match(m.text, /• Atlas <b> · İş Analisti \(82 puan\)/);
   assert.match(m.html, /Atlas &lt;b&gt;/);
   assert.doesNotMatch(m.html, /Atlas <b>/);
@@ -210,6 +210,11 @@ test('daily summary: sent once a day, only with news, respects the opt-out', asy
   assert.match(mail.text, /Diğer ilanlar:\n• Satış Temsilcisi – Kuzey A\.Ş\. \(30 puan\)/);
   assert.ok(mail.text.indexOf('İş Analisti') < mail.text.indexOf('Satış Temsilcisi'));
   assert.equal((await sendDailySummary({ supabase: sb, mailer, config: cfg, userId: UID, now })).reason, 'already_sent');
+  // Aynı gün sonraki tarama: yeni taslak yoksa ikinci e-posta gitmez, yeni taslak varsa gider.
+  assert.equal((await sendDailySummary({ supabase: sb, mailer, config: cfg, userId: UID, now, stats: { searches: 6, drafted: 0 } })).reason, 'already_sent');
+  const extra = await sendDailySummary({ supabase: sb, mailer, config: cfg, userId: UID, now, stats: { searches: 6, pages: 2, drafted: 1 } });
+  assert.equal(extra.sent, true);
+  assert.equal(extra.alerts, 0); // ilk özette listelenen ilanlar tekrar gelmez
 
   // Ertesi gün yeni bir şey yok: elle çağrıda gitmez, zamanlanmış taramadan sonra kısa özet gider.
   const tomorrow = new Date(now.getTime() + 30 * 3600 * 1000);
