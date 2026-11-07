@@ -29,7 +29,8 @@ const HIRING_SIGNALS = [
   'başvurunuzu', 'basvurunuzu', 'join our team', "we're hiring", 'we are hiring', 'open positions', 'careers at',
   'işe alım süreci', 'ise alim sureci',
 ];
-const SUBPAGES = ['/kariyer', '/insan-kaynaklari', '/careers', '/iletisim', '/contact'];
+// E-posta yazmayan sayfalarda şirketin kendi kariyer / İK / iletişim sayfalarına bakılır (sırayla, İK adresi bulununca durur).
+export const SUBPAGES = ['/kariyer', '/kariyer-firsatlari', '/insan-kaynaklari', '/ik', '/careers', '/tr/kariyer', '/iletisim', '/contact'];
 
 export const hostOf = (url) => {
   try {
@@ -127,10 +128,10 @@ export function domainMatches(email, siteHost) {
   return FREE_MAIL.has(d) || rootName(d) === rootName(siteHost);
 }
 
-export function createPageReader({ fetchImpl = fetch, timeoutMs = 12_000, maxBytes = 1_500_000 } = {}) {
-  async function get(url) {
+export function createPageReader({ fetchImpl = fetch, timeoutMs = 12_000, subTimeoutMs = 6_000, maxBytes = 1_500_000 } = {}) {
+  async function get(url, ms = timeoutMs) {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    const timer = setTimeout(() => ctrl.abort(), ms);
     try {
       // Redirects are followed by hand so every hop is checked (no requests to internal addresses).
       let current = url;
@@ -163,9 +164,13 @@ export function createPageReader({ fetchImpl = fetch, timeoutMs = 12_000, maxByt
     if (!page.emails.length && !JOB_SITES.some((s) => page.host.includes(s))) {
       const origin = new URL(hit.url).origin;
       const found = [];
+      let misses = 0;
       for (const path of SUBPAGES) {
-        const sub = await get(origin + path);
-        if (!sub) continue;
+        const sub = await get(origin + path, subTimeoutMs);
+        if (!sub) {
+          if (++misses >= 5 && !found.length) break; // site alt sayfa vermiyor, boşuna bekleme
+          continue;
+        }
         const e = emailsIn(sub);
         if (!e.length) continue;
         for (const a of e) if (!found.includes(a)) found.push(a);

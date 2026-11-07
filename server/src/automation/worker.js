@@ -67,11 +67,18 @@ async function mapLimit(items, limit, fn) {
   return out;
 }
 
+/** Bir kullanıcının bugünkü otomatik tarama saatleri (Türkiye saati), ör. 12 → [12, 16, 20]. */
+export function autoSlots(scanHour = 9, { runs = 3, gap = 4 } = {}) {
+  const out = [];
+  for (let i = 0; i < runs; i++) if (scanHour + i * gap <= 23) out.push(scanHour + i * gap);
+  return out;
+}
+
 /**
- * Saatlik tetikte çalışacak kullanıcılar: tarama saati gelmiş (ya da geçmiş, kaçırılan çalışmalar için)
- * olanlar. Bugün zaten çalışmış olanları runForUser kendisi atlar.
+ * Saatlik tetikte çalışacak kullanıcılar: bugün saati gelmiş otomatik dilim sayısı, bugün yapılan
+ * (otomatik + elle) tarama sayısından fazla olanlar. Kaçırılan dilimler bir sonraki tetikte telafi edilir.
  */
-export async function listDueUsers(supabase, now = new Date()) {
+export async function listDueUsers(supabase, now = new Date(), { runs = 3, gap = 4 } = {}) {
   let rows;
   try {
     rows = await supabase.select('profiles', 'setup_step=gte.6&status=neq.paused&select=id,scan_hour');
@@ -79,10 +86,13 @@ export async function listDueUsers(supabase, now = new Date()) {
     rows = await supabase.select('profiles', 'setup_step=gte.6&status=neq.paused&select=id'); // sütun henüz eklenmemişse
   }
   const hour = trHour(now);
-  const ran = new Set(
-    (await supabase.select('run_logs', `started_at=gte.${encodeURIComponent(dayStart(now))}&select=user_id`)).map((r) => r.user_id),
-  );
-  return rows.filter((r) => (r.scan_hour ?? 9) <= hour && !ran.has(r.id)).map((r) => r.id);
+  const count = new Map();
+  for (const r of await supabase.select('run_logs', `started_at=gte.${encodeURIComponent(dayStart(now))}&select=user_id`)) {
+    count.set(r.user_id, (count.get(r.user_id) || 0) + 1);
+  }
+  return rows
+    .filter((r) => autoSlots(r.scan_hour ?? 9, { runs, gap }).filter((h) => h <= hour).length > (count.get(r.id) || 0))
+    .map((r) => r.id);
 }
 
 const REASONS = {
@@ -105,15 +115,13 @@ const whyRejected = (kind, v, warnings) => {
  * onProgress({ step, message, pct, stats }) is called at every meaningful step so the panel
  * can narrate the scan live. step: start | search | read | evaluate | draft | skip | done.
  */
-export async function runForUser({ supabase, llm, budget, search, readPage, log, config, userId, now = new Date(), force = false, sleep = sleepMs, onProgress = () => {} }) {
+export async function runForUser({ supabase, llm, budget, search, readPage, log, config, userId, now = new Date(), force = false, trigger = 'manual', sleep = sleepMs, onProgress = () => {} }) {
   const uid = enc(userId);
   const [profile] = await supabase.select('profiles', `id=eq.${uid}&select=*`);
   if (!profile) return { status: 'skipped', reason: 'no_profile' };
   if (profile.status === 'paused' || (profile.setup_step || 0) < 6) return { status: 'skipped', reason: 'not_ready' };
 
   const today = dayStart(now);
-  if (!force) {
-  }
   // Günde en fazla RUNS_PER_DAY tarama (zamanlanmış + elle toplam). Her tarama farklı arama dilimini kullanır.
   const ranToday = (await supabase.select('run_logs', `user_id=eq.${uid}&started_at=gte.${enc(today)}&select=id`)).length;
   const maxRuns = config.RUNS_PER_DAY || 3;
@@ -138,7 +146,13 @@ export async function runForUser({ supabase, llm, budget, search, readPage, log,
   }
   const fullName = profile.full_name || cvProfile.full_name || '';
 
-  const [run] = await supabase.insert('run_logs', [{ user_id: userId, started_at: now.toISOString() }]);
+  // trigger: 'auto' (zamanlanmış) | 'manual' (panelden). Sütun yoksa (eski veritabanı) onsuz kaydedilir.
+  let run;
+  try {
+    [run] = await supabase.insert('run_logs', [{ user_id: userId, started_at: now.toISOString(), trigger }]);
+  } catch {
+    [run] = await supabase.insert('run_logs', [{ user_id: userId, started_at: now.toISOString() }]);
+  }
   const stats = { searches: 0, hits: 0, pages: 0, evaluated: 0, drafted: 0, errors: [] };
   const emit = (step, message, pct) => {
     try { onProgress({ step, message, pct: Math.round(pct), stats: { searches: stats.searches, hits: stats.hits, pages: stats.pages, evaluated: stats.evaluated, drafted: stats.drafted } }); } catch { /* izleyici koptu */ }
@@ -264,8 +278,8 @@ export async function runForUser({ supabase, llm, budget, search, readPage, log,
         },
       ]);
     }
-    emit('done', stats.drafted ? `Bitti: ${stats.drafted} başvuru onayını bekliyor.` : 'Bitti: bugün sana uygun yeni ilan çıkmadı. Yarın sabah tekrar bakacağım.', 100);
-    return { status: 'ok', ...stats, runsToday: ranToday + 1, maxRuns };
+    emit('done', stats.drafted ? `Bitti: ${stats.drafted} başvuru onayını bekliyor.` : 'Bitti: bu taramada sana uygun yeni ilan çıkmadı. Bir sonraki taramada tekrar bakacağım.', 100);
+    return { status: 'ok', ...stats, trigger, runsToday: ranToday + 1, maxRuns };
   } catch (err) {
     stats.errors.push(err.code || err.message);
     log?.error('worker_failed', { userId, error: err.message });

@@ -72,6 +72,9 @@ const JOB_TEMPLATES = [
 const OPEN_TEMPLATES = [
   (r, c) => `${r} "ekibimize katılın" "özgeçmişinizi" ${c}`,
   (r, c) => `${r} şirketi kariyer "insan kaynakları" "açık pozisyonlar" ${c}`,
+  // Şirketlerin kendi kariyer sayfaları (iş sitelerinin aksine çoğunda İK adresi yazar).
+  (r, c) => `${r} "kariyer" "açık pozisyonlarımız" "cv" ${c}`,
+  (r, c) => `"${r}" "insan kaynakları" "cv'nizi" "adresine" ${c}`,
 ];
 
 /** Today's slice of all role × place × template combinations (rotates daily so coverage grows over time). */
