@@ -1,6 +1,6 @@
 // Faz 2: onay bekleyen başvurular, gönderilenler, Gmail bağlantısı ve elle tarama.
 import React, { useCallback, useEffect, useState } from 'react';
-import { listApplications, updateApplication, sendApplication, getGmail, connectGmail, disconnectGmail, runNowStream, listAlerts, removeAlert, updateMe } from '../../lib/automationApi.js';
+import { listApplications, updateApplication, sendApplication, getGmail, connectGmail, disconnectGmail, runNowStream, listAlerts, removeAlert, listRuns, updateMe } from '../../lib/automationApi.js';
 import { Spinner } from '../../hz/ui.jsx';
 
 const fmt = (iso) => new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
@@ -325,6 +325,37 @@ export function ListingsView() {
   );
 }
 
+// ---- Tarama geçmişi --------------------------------------------------------------
+const hh = (h) => `${String(h).padStart(2, '0')}:00`;
+const when = (iso) => new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' });
+const TRIGGER = { auto: 'Otomatik', manual: 'Elle' };
+
+function RunHistory({ scanHour }) {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState(null);
+  useEffect(() => { listRuns().then(setData).catch((e) => setErr(e.message)); }, []);
+  const hours = data?.autoHours || [scanHour];
+  return (
+    <section>
+      <h3 className="hz-h3">Taramalar</h3>
+      <p className="hz-small">Asistan her gün {hours.map(hh).join(', ')} civarında kendiliğinden tarar. Elle başlattığın taramalar da günlük {data?.maxRuns || 3} taramaya sayılır.</p>
+      {err && <p className="hz-notice" role="alert">{err}</p>}
+      {!data && !err && <Spinner />}
+      {data && (data.items.length ? (
+        <ul className="hz-runs">
+          {data.items.map((r) => (
+            <li key={r.id}>
+              <span>{when(r.started_at)}</span>
+              <span className="hz-status" data-on={r.trigger === 'auto' || undefined}>{TRIGGER[r.trigger] || 'Tarama'}</span>
+              <span className="hz-small">{!r.finished_at ? 'sürüyor ya da yarıda kaldı' : `${r.searches} arama · ${r.drafted} başvuru hazırlandı`}{r.error ? ' · hata' : ''}</span>
+            </li>
+          ))}
+        </ul>
+      ) : <p className="hz-small">Henüz tarama yapılmadı.</p>)}
+    </section>
+  );
+}
+
 // ---- Ayarlar ------------------------------------------------------------------
 export function SettingsView({ gmail, reloadGmail, onConnect, onEditSetup, scanHour = 9, dailySummary = true, email }) {
   const [busy, setBusy] = useState(false);
@@ -366,13 +397,14 @@ export function SettingsView({ gmail, reloadGmail, onConnect, onEditSetup, scanH
         <h3 className="hz-h3">Günlük özet e-postası</h3>
         <label className="hz-check">
           <input type="checkbox" checked={summary} onChange={(e) => toggleSummary(e.target.checked)} />
-          <span>Her gün taramadan sonra onay bekleyen başvuruları ve iş alarmlarından gelen uygun ilanları {email ? <strong>{email}</strong> : 'e-posta adresime'} gönder. Yeni bir şey yoksa e-posta gelmez.</span>
+          <span>Her gün ilk taramadan sonra onay bekleyen başvuruları ve iş alarmlarından gelen ilanları {email ? <strong>{email}</strong> : 'e-posta adresime'} gönder. Günün sonraki taramalarında yalnızca yeni bir şey çıkarsa tekrar gelir.</span>
         </label>
         {summaryErr && <p className="hz-notice" role="alert">{summaryErr}</p>}
       </section>
+      <RunHistory scanHour={scanHour} />
       <section>
         <h3 className="hz-h3">Hedefler ve tercihler</h3>
-        <p className="hz-small">CV'lerin, roller, şehirler, günlük limit ve şirket bekleme süresi kurulumda. Asistan her gün {String(scanHour).padStart(2, '0')}:00 civarında yeni ilanları tarar.</p>
+        <p className="hz-small">CV'lerin, roller, şehirler, günlük limit, tarama saati ve şirket bekleme süresi kurulumda.</p>
         <div><button type="button" className="hz-btn hz-btn-sm" onClick={onEditSetup}>Kurulumu düzenle</button></div>
       </section>
     </div>
