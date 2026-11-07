@@ -70,6 +70,9 @@ const EnvSchema = z.object({
   MAIL_FROM: z.string().default('Hazır CV <bildirim@hazircv.com.tr>'),
   ALERT_DOMAIN: z.string().default('alarm.hazircv.com.tr'),
   RUNS_PER_DAY: z.coerce.number().int().min(1).max(10).default(3),
+  // Otomatik tarama dilimleri: tarama saati, +4 saat, +8 saat (ör. 12:00, 16:00, 20:00). Elle taramalar da günlük toplama sayılır.
+  AUTO_RUNS_PER_DAY: z.coerce.number().int().min(1).max(10).default(3),
+  AUTO_RUN_GAP_HOURS: z.coerce.number().int().min(1).max(12).default(4),
   SEARCHES_PER_USER: z.coerce.number().int().min(1).max(10).default(6),
   PAGES_PER_USER: z.coerce.number().int().min(1).max(30).default(10),
   // Ücretsiz Gemini katmanı dakikada ~15 istek; işçi çağrılar arasında bu kadar bekler.
