@@ -136,13 +136,42 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget,
   router.post('/internal/users', cronOnly, async (req, res) => {
     res.json({ users: workerReady ? await listDueUsers(supabase) : [], workerReady });
   });
+  /** Zamanlanmış tarama + ardından günlük özet (Hazır CV adresinden). */
+  async function scheduledRun(userId, log) {
+    const result = await runWorker(userId, log);
+    const summary = await sendDailySummary({ supabase, mailer, config, userId, log, stats: result.status === 'ok' ? result : null }).catch((err) => ({ sent: false, reason: err.message }));
+    return { ...result, summary };
+  }
   router.post('/internal/run/:userId', cronOnly, async (req, res) => {
     const userId = z.uuid().parse(req.params.userId);
     if (!workerReady) throw Errors.notConfigured();
-    const result = await runWorker(userId, req.log);
-    // Zamanlanmış taramadan sonra günlük özet (Hazır CV adresinden; anlatacak bir şey yoksa gitmez).
-    const summary = await sendDailySummary({ supabase, mailer, config, userId, log: req.log, stats: result.status === 'ok' ? result : null }).catch((err) => ({ sent: false, reason: err.message }));
-    res.json({ ...result, summary });
+    res.json(await scheduledRun(userId, req.log));
+  });
+
+  // Supabase pg_cron her saat bu ucu çağırır (GitHub'ın zamanlayıcısı saatlerce gecikebiliyor).
+  // Gizli anahtar gerekmez: yalnızca tarama saati gelmiş ve bugün hiç taranmamış kullanıcıları çalıştırır,
+  // yani kötüye kullanılsa bile olacak olan taramayı erkene almaktan fazlasını yapamaz. 5 dakikada bir kez çalışır.
+  let lastTick = 0;
+  let ticking = false;
+  router.post('/internal/tick', async (req, res) => {
+    if (!workerReady) return res.json({ ok: false, reason: 'not_ready' });
+    const now = Date.now();
+    if (ticking || now - lastTick < 5 * 60_000) return res.json({ ok: true, skipped: ticking ? 'running' : 'throttled' });
+    lastTick = now;
+    const users = await listDueUsers(supabase);
+    res.json({ ok: true, users: users.length });
+    if (!users.length) return;
+    ticking = true;
+    (async () => {
+      for (const userId of users) {
+        try {
+          const r = await scheduledRun(userId, req.log);
+          req.log.info('tick_user_done', { userId, status: r.status, reason: r.reason, drafted: r.drafted, summary: r.summary?.sent });
+        } catch (err) {
+          req.log.warn('tick_user_failed', { userId, error: err.message });
+        }
+      }
+    })().finally(() => { ticking = false; });
   });
 
   // Resend: <alert_code>@alarm.hazircv.com.tr adresine gelen e-posta. Webhook yalnızca kimlik taşır;
@@ -398,6 +427,13 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget,
       `user_id=eq.${uid(req)}&select=id,source,title,company,location,url,score,reason,received_at&order=received_at.desc,score.desc.nullslast&limit=100`,
     );
     res.json({ address: mailer && config.ALERT_DOMAIN ? `${profile.alert_code}@${config.ALERT_DOMAIN}` : null, items });
+  });
+
+  router.delete('/alerts/:id', async (req, res) => {
+    const id = z.uuid().safeParse(req.params.id);
+    if (!id.success) throw Errors.badRequest('Geçersiz istek.');
+    await supabase.remove('alert_jobs', `id=eq.${id.data}&user_id=eq.${uid(req)}`);
+    res.json({ ok: true });
   });
 
   // ---- Gelen kutusu --------------------------------------------------------
