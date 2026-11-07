@@ -2,7 +2,6 @@
 // Fotoğraflar 1376×768 yerel koordinatlı bir "tuval"de durur; tuval, sahneyi odak noktasına göre kaplayacak
 // şekilde ölçeklenir. Ekran içi arayüz, boş ekran dörtgenine homografi (matrix3d) ile oturtulur.
 import React, { useEffect, useRef, useState } from 'react';
-import { MaintenanceButton } from '../../hz/ui.jsx';
 import { navigate } from '../../router.js';
 
 // Görseller: yerel çözünürlük (w×h) ve varsa boş ekranın köşeleri (sol üst, sağ üst, sağ alt, sol alt).
@@ -111,7 +110,7 @@ function Hero() {
       <p className="hz-lead">Hazır CV asistanı sana uygun ilanları bulur, kendi CV'lerinden birini seçer ve ilana özel ön yazını hazırlar. Sen onaylarsın, başvuru Gmail'inden gider. Ücretsiz.</p>
       <div className="hz-hero-cta">
         <button type="button" className="hz-btn hz-btn-posta hz-btn-lg" onClick={() => navigate('/otomasyon')}>Asistanı kur</button>
-        <MaintenanceButton className="hz-btn px-btn-light hz-btn-lg" label="Tek ilana CV hazırla" />
+        <button type="button" className="hz-btn px-btn-light hz-btn-lg" onClick={() => navigate('/cv')}>Tek ilana CV hazırla</button>
       </div>
       <span className="hz-scroll-hint">Nasıl çalıştığını görmek için kaydır</span>
     </div>
