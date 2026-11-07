@@ -412,3 +412,8 @@
 .hz-alert-setup .hz-steps li::before { content: none; }
 .hz-alert-setup .hz-steps strong { display: inline; }
 .hz-alert-setup .hz-steps code { font-size: 13px; background: var(--posta-acik); padding: 1px 4px; border-radius: 2px; }
+
+/* Ayarlar · tarama geçmişi */
+.hz-runs { list-style: none; padding: 0; margin: 8px 0 0; display: grid; gap: 6px; }
+.hz-runs li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 8px 0; font-family: var(--f-ui); border-top: 1px solid var(--cizgi-acik); font-size: 14px; }
+.hz-runs li:first-child { border-top: 0; }
