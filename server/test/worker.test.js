@@ -210,6 +210,13 @@ test('worker drafts approval-pending applications and runs at most three times a
   const fourth = await run();
   assert.equal(fourth.reason, 'daily_runs_used');
   assert.equal(sb.db.run_logs.length, 3);
+
+  // Saatlik tetik (pg_cron): sırrı gerekmez, bugün taranmış kullanıcıyı tekrar çalıştırmaz, 5 dk'da bir kez çalışır.
+  const t1 = await (await call('/internal/tick', { token: null, method: 'POST' })).json();
+  assert.deepEqual(t1, { ok: true, users: 0 });
+  const t2 = await (await call('/internal/tick', { token: null, method: 'POST' })).json();
+  assert.equal(t2.skipped, 'throttled');
+  assert.equal(sb.db.run_logs.length, 3);
 });
 
 test('lists pending applications and allows editing', async () => {

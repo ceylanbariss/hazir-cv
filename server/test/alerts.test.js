@@ -44,7 +44,7 @@ function fakeSupabase() {
       return out;
     },
     update: async (t, q, patch) => { const hit = where(db[t], q); hit.forEach((r) => Object.assign(r, patch)); return hit; },
-    remove: async () => [],
+    remove: async (t, q) => { const hit = where(db[t], q); db[t] = db[t].filter((r) => !hit.includes(r)); return hit; },
   };
 }
 
@@ -178,6 +178,12 @@ test('LinkedIn alert → scored jobs in İlanlar, inbox note, duplicates skipped
   const data = await r.json();
   assert.equal(data.address, `${CODE}@${DOMAIN}`);
   assert.equal(data.items.length, 2);
+
+  // Kullanıcı bir ilanı kaldırabilir (yalnızca kendi ilanını)
+  const del = await fetch(`${base}/alerts/${sales.id}`, { method: 'DELETE', headers: { Authorization: 'Bearer tok' } });
+  assert.equal(del.status, 200);
+  assert.equal(sb.db.alert_jobs.length, 1);
+  sb.db.alert_jobs.push({ ...sales }); // sonraki testler için geri koy
 });
 
 test('forwarding confirmation lands in the inbox with code and link; strangers are ignored', async () => {
@@ -204,6 +210,15 @@ test('daily summary: sent once a day, only with news, respects the opt-out', asy
   assert.match(mail.text, /Diğer ilanlar:\n• Satış Temsilcisi – Kuzey A\.Ş\. \(30 puan\)/);
   assert.ok(mail.text.indexOf('İş Analisti') < mail.text.indexOf('Satış Temsilcisi'));
   assert.equal((await sendDailySummary({ supabase: sb, mailer, config: cfg, userId: UID, now })).reason, 'already_sent');
+
+  // Ertesi gün yeni bir şey yok: elle çağrıda gitmez, zamanlanmış taramadan sonra kısa özet gider.
+  const tomorrow = new Date(now.getTime() + 30 * 3600 * 1000);
+  sb.db.applications = sb.db.applications.filter((a) => a.id !== 'a1');
+  assert.equal((await sendDailySummary({ supabase: sb, mailer, config: cfg, userId: UID, now: tomorrow })).reason, 'nothing_new');
+  const quiet = await sendDailySummary({ supabase: sb, mailer, config: cfg, userId: UID, now: tomorrow, stats: { searches: 6, pages: 3, drafted: 0 } });
+  assert.equal(quiet.sent, true);
+  assert.equal(mailer.sent.at(-1).subject, 'Hazır CV · Bugün yeni ilan yok');
+  assert.match(mailer.sent.at(-1).text, /6 arama, 3 sayfa/);
 
   sb.db.inbox_items = sb.db.inbox_items.filter((i) => i.kind !== 'daily_summary');
   sb.db.profiles[0].daily_summary = false;
