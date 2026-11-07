@@ -10,7 +10,7 @@ import { requireUser } from '../automation/auth.js';
 import { runTask } from '../llm/runTask.js';
 import * as P from '../automation/prompts.js';
 import { buildMime } from '../automation/gmail.js';
-import { runForUser, listDueUsers, dayStart } from '../automation/worker.js';
+import { runForUser, listDueUsers, dayStart, autoSlots } from '../automation/worker.js';
 import { handleInboundEmail } from '../automation/alerts.js';
 import { sendDailySummary } from '../automation/summary.js';
 import { verifySvix } from '../automation/mailer.js';
@@ -133,12 +133,13 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget,
 
   // GitHub Actions günlük tetikleyicisi: önce kullanıcı listesini alır, sonra her kullanıcı için ayrı çağırır.
   const cronOnly = (req, res, next) => (secretMatches(req.get('x-cron-secret'), config.CRON_SECRET) ? next() : next(Errors.notFound()));
+  const autoOpts = { runs: Math.min(config.AUTO_RUNS_PER_DAY, config.RUNS_PER_DAY), gap: config.AUTO_RUN_GAP_HOURS };
   router.post('/internal/users', cronOnly, async (req, res) => {
-    res.json({ users: workerReady ? await listDueUsers(supabase) : [], workerReady });
+    res.json({ users: workerReady ? await listDueUsers(supabase, new Date(), autoOpts) : [], workerReady });
   });
   /** Zamanlanmış tarama + ardından günlük özet (Hazır CV adresinden). */
   async function scheduledRun(userId, log) {
-    const result = await runWorker(userId, log);
+    const result = await runWorker(userId, log, { trigger: 'auto' });
     const summary = await sendDailySummary({ supabase, mailer, config, userId, log, stats: result.status === 'ok' ? result : null }).catch((err) => ({ sent: false, reason: err.message }));
     return { ...result, summary };
   }
@@ -149,7 +150,7 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget,
   });
 
   // Supabase pg_cron her saat bu ucu çağırır (GitHub'ın zamanlayıcısı saatlerce gecikebiliyor).
-  // Gizli anahtar gerekmez: yalnızca tarama saati gelmiş ve bugün hiç taranmamış kullanıcıları çalıştırır,
+  // Gizli anahtar gerekmez: yalnızca otomatik tarama dilimi gelmiş ve o dilimi henüz taranmamış kullanıcıları çalıştırır,
   // yani kötüye kullanılsa bile olacak olan taramayı erkene almaktan fazlasını yapamaz. 5 dakikada bir kez çalışır.
   let lastTick = 0;
   let ticking = false;
@@ -158,7 +159,7 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget,
     const now = Date.now();
     if (ticking || now - lastTick < 5 * 60_000) return res.json({ ok: true, skipped: ticking ? 'running' : 'throttled' });
     lastTick = now;
-    const users = await listDueUsers(supabase);
+    const users = await listDueUsers(supabase, new Date(), autoOpts);
     res.json({ ok: true, users: users.length });
     if (!users.length) return;
     ticking = true;
@@ -420,6 +421,23 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget,
   });
 
   // ---- Yönlendirilen iş alarmlarından gelen ilanlar -------------------------------
+  // Son taramalar (otomatik / elle) ve bugünkü otomatik tarama saatleri.
+  router.get('/runs', async (req, res) => {
+    const uid = encodeURIComponent(req.user.id);
+    let rows;
+    try {
+      rows = await supabase.select('run_logs', `user_id=eq.${uid}&select=id,started_at,finished_at,searches,drafted,error,trigger&order=started_at.desc&limit=10`);
+    } catch {
+      rows = await supabase.select('run_logs', `user_id=eq.${uid}&select=id,started_at,finished_at,searches,drafted,error&order=started_at.desc&limit=10`);
+    }
+    const [profile] = await supabase.select('profiles', `id=eq.${uid}&select=scan_hour`);
+    const items = rows
+      .sort((a, b) => String(b.started_at).localeCompare(String(a.started_at)))
+      .slice(0, 10)
+      .map((r) => ({ id: r.id, started_at: r.started_at, finished_at: r.finished_at, searches: r.searches || 0, drafted: r.drafted || 0, error: !!r.error, trigger: r.trigger || null }));
+    res.json({ items, autoHours: autoSlots(profile?.scan_hour ?? 9, autoOpts), maxRuns: config.RUNS_PER_DAY });
+  });
+
   router.get('/alerts', async (req, res) => {
     const { profile } = await ensureProfile(req);
     const items = await supabase.select(
