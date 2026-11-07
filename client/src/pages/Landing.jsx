@@ -1,14 +1,14 @@
 // Açılış: kahraman → kaydırdıkça akan anlatım → iki yol (tek ilana CV ya da başvuru asistanı).
 import React from 'react';
 import { navigate } from '../router.js';
-import { Shell, TopBar, Footer, CvSheetArt, EnvelopeArt, MaintenanceButton } from '../hz/ui.jsx';
+import { Shell, TopBar, Footer, CvSheetArt, EnvelopeArt } from '../hz/ui.jsx';
 import Scrolly from './landing/Scrolly.jsx';
 
 export default function Landing() {
   return (
     <Shell>
       <TopBar>
-        <MaintenanceButton className="hz-link hz-wide-only" label="Tek ilana CV hazırla" />
+        <button type="button" className="hz-link hz-wide-only" onClick={() => navigate('/cv')}>Tek ilana CV hazırla</button>
         <button type="button" className="hz-link" onClick={() => navigate('/otomasyon')}>Hesabına gir</button>
       </TopBar>
       <main>
@@ -19,14 +19,14 @@ export default function Landing() {
             <h2 className="hz-display" style={{ fontSize: 'clamp(32px, 4.4vw, 52px)', maxWidth: '15ch' }}>Bugün ne yapmak istiyorsun?</h2>
           </div>
           <div className="hz-choices">
-            <div className="hz-sheet hz-choice hz-choice-off" aria-disabled="true" title="Kısa süreliğine bakımda">
+            <button type="button" className="hz-sheet hz-choice" onClick={() => navigate('/cv')}>
               <div className="hz-choice-art"><CvSheetArt /></div>
               <div className="hz-choice-body">
                 <h3 className="hz-h1">İlana göre CV hazırla</h3>
                 <p>CV'ni ve başvuracağın ilanı ver. İlana göre yeniden yazılmış, ATS uyumlu CV'ni, eksik ve güçlü yönlerinle birlikte al. İstersen mülakat provası yap.</p>
-                <span className="hz-btn hz-soon" aria-hidden="true"><span className="hz-soon-label">CV hazırla</span><span className="hz-soon-note">Kısa süreliğine bakımda</span></span>
+                <span className="hz-btn">CV hazırla</span>
               </div>
-            </div>
+            </button>
             <button type="button" className="hz-sheet hz-choice" onClick={() => navigate('/otomasyon')}>
               <div className="hz-choice-art"><EnvelopeArt /></div>
               <div className="hz-choice-body">
