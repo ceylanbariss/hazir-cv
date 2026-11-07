@@ -1,6 +1,6 @@
 // Faz 2: onay bekleyen başvurular, gönderilenler, Gmail bağlantısı ve elle tarama.
 import React, { useCallback, useEffect, useState } from 'react';
-import { listApplications, updateApplication, sendApplication, getGmail, connectGmail, disconnectGmail, runNowStream, listAlerts, updateMe } from '../../lib/automationApi.js';
+import { listApplications, updateApplication, sendApplication, getGmail, connectGmail, disconnectGmail, runNowStream, listAlerts, removeAlert, updateMe } from '../../lib/automationApi.js';
 import { Spinner } from '../../hz/ui.jsx';
 
 const fmt = (iso) => new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
@@ -288,6 +288,9 @@ export function ListingsView() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
   useEffect(() => { listAlerts().then(setData).catch((e) => setErr(e.message)); }, []);
+  const hide = async (id) => {
+    try { await removeAlert(id); setData((d) => ({ ...d, items: d.items.filter((j) => j.id !== id) })); } catch (e) { setErr(e.message); }
+  };
   if (err) return <p className="hz-notice" role="alert" style={{ margin: '0 26px 26px' }}>{err}</p>;
   if (!data) return <Spinner />;
   if (!data.address) return <div className="hz-empty"><p>LinkedIn ve Kariyer.net alarmlarını bağlama özelliği çok yakında açılacak.</p></div>;
@@ -306,11 +309,14 @@ export function ListingsView() {
                 <p>{[j.company, j.location, SOURCE[j.source] || j.source, fmt(j.received_at)].filter(Boolean).join(' · ')}</p>
               </div>
               {j.reason && <p className="hz-small">{j.reason}</p>}
-              <a className="hz-source" href={j.url} target="_blank" rel="noreferrer noopener">
-                <span className="hz-source-label">İlana git</span>
-                <span className="hz-source-url">{shortUrl(j.url)}</span>
-                <span aria-hidden="true">↗</span>
-              </a>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+                <a className="hz-source" href={j.url} target="_blank" rel="noreferrer noopener">
+                  <span className="hz-source-label">İlana git</span>
+                  <span className="hz-source-url">{shortUrl(j.url)}</span>
+                  <span aria-hidden="true">↗</span>
+                </a>
+                <button type="button" className="hz-link" onClick={() => hide(j.id)}>Kaldır</button>
+              </div>
             </li>
           ))}
         </ul>
