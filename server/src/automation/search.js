@@ -65,6 +65,9 @@ const JOB_TEMPLATES = [
   (r, c) => `"${r}" iş ilanı "özgeçmişinizi" "adresine" ${c}`,
   (r, c) => `"${r}" pozisyonu "cv" "gönderebilirsiniz" ${c}`,
   (r, c) => `${r} ilanı başvuru e-posta ${c}`,
+  // Üzerinde İK e-posta adresi yazan ilanları doğrudan hedefler (adres yoksa başvuru gönderilemez).
+  (r, c) => `"${r}" ilan "ik@" ${c}`,
+  (r, c) => `"${r}" "kariyer@" başvuru ${c}`,
 ];
 const OPEN_TEMPLATES = [
   (r, c) => `${r} "ekibimize katılın" "özgeçmişinizi" ${c}`,

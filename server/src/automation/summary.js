@@ -15,7 +15,8 @@ export function buildSummary({ name, pending, alerts, appUrl, stats }) {
   const parts = [];
   if (pending.length) parts.push(`${pending.length} başvuru onayını bekliyor`);
   if (alerts.length) parts.push(`${alerts.length} yeni ilan`);
-  const subject = `Hazır CV · ${parts.join(', ')}`;
+  const subject = `Hazır CV · ${parts.length ? parts.join(', ') : 'Bugün yeni ilan yok'}`;
+  const nothing = !pending.length && !alerts.length;
 
   const good = alerts.filter((j) => (j.score ?? 0) >= ALERT_MIN_SCORE);
   const rest = alerts.filter((j) => (j.score ?? 0) < ALERT_MIN_SCORE);
@@ -30,6 +31,7 @@ export function buildSummary({ name, pending, alerts, appUrl, stats }) {
     '',
     ...(pending.length ? ['Onayını bekleyen başvurular:', ...pending.map((a) => `• ${appLine(a)}`), ''] : []),
     ...(statLine ? [statLine, ''] : []),
+    ...(nothing ? ['Bugün sana uygun yeni ilan çıkmadı. Yarın tekrar bakacağım; istersen panelden elle tarama da başlatabilirsin.', ''] : []),
     ...(good.length ? ['İş alarmlarından gelen uygun ilanlar:', ...good.map((j) => `• ${alertLine(j)} – ${j.url}`), ''] : []),
     ...(rest.length ? ['Diğer ilanlar:', ...rest.map((j) => `• ${alertLine(j)} – ${j.url}`), ''] : []),
     `Kontrol edip göndermek için: ${panel}`,
@@ -47,6 +49,7 @@ export function buildSummary({ name, pending, alerts, appUrl, stats }) {
 <p>Merhaba${first ? ` ${esc(first)}` : ''},</p>
 ${pending.length ? `<p style="margin:18px 0 6px"><strong>Onayını bekleyen başvurular</strong></p><ul style="padding-left:18px;margin:0">${pending.map((a) => li(esc(appLine(a)))).join('')}</ul>` : ''}
 ${statLine ? `<p style="color:#555">${esc(statLine)}</p>` : ''}
+${nothing ? '<p>Bugün sana uygun yeni ilan çıkmadı. Yarın tekrar bakacağım; istersen panelden elle tarama da başlatabilirsin.</p>' : ''}
 ${alertBlock('İş alarmlarından gelen uygun ilanlar', good)}
 ${alertBlock('Diğer ilanlar', rest)}
 <p style="margin:24px 0"><a href="${esc(panel)}" style="background:#1a1a1a;color:#fff;padding:10px 18px;text-decoration:none;border-radius:4px;display:inline-block">Panele git</a></p>
@@ -73,7 +76,8 @@ export async function sendDailySummary({ supabase, mailer, config, userId, log, 
     'alert_jobs',
     `user_id=eq.${uid}&received_at=gte.${enc(since)}&select=title,company,score,url,source&order=score.desc.nullslast&limit=${ALERT_LIMIT}`,
   );
-  if (!pending.length && !alerts.length) return { sent: false, reason: 'nothing_new' };
+  // Zamanlanmış taramadan sonra (stats var) yeni bir şey olmasa da kısa bir özet gider; elle çağrıda gitmez.
+  if (!pending.length && !alerts.length && !stats) return { sent: false, reason: 'nothing_new' };
 
   const mail = buildSummary({ name: profile.full_name, pending, alerts, stats, appUrl: config.APP_URL || 'https://hazircv.com.tr' });
   try {
