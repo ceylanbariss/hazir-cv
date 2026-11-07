@@ -70,7 +70,7 @@ const EnvSchema = z.object({
   MAIL_FROM: z.string().default('Hazır CV <bildirim@hazircv.com.tr>'),
   ALERT_DOMAIN: z.string().default('alarm.hazircv.com.tr'),
   RUNS_PER_DAY: z.coerce.number().int().min(1).max(10).default(3),
-  SEARCHES_PER_USER: z.coerce.number().int().min(1).max(10).default(4),
+  SEARCHES_PER_USER: z.coerce.number().int().min(1).max(10).default(6),
   PAGES_PER_USER: z.coerce.number().int().min(1).max(30).default(10),
   // Ücretsiz Gemini katmanı dakikada ~15 istek; işçi çağrılar arasında bu kadar bekler.
   WORKER_LLM_GAP_MS: z.coerce.number().int().min(0).default(4500),
