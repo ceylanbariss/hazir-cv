@@ -1,6 +1,6 @@
 // Faz 2: onay bekleyen başvurular, gönderilenler, Gmail bağlantısı ve elle tarama.
 import React, { useCallback, useEffect, useState } from 'react';
-import { listApplications, updateApplication, sendApplication, getGmail, connectGmail, disconnectGmail, runNowStream, listAlerts, removeAlert, listRuns, updateMe } from '../../lib/automationApi.js';
+import { listApplications, updateApplication, sendApplication, getGmail, connectGmail, disconnectGmail, runNowStream, listAlerts, removeAlert, checkAlerts, listRuns, updateMe } from '../../lib/automationApi.js';
 import { Spinner } from '../../hz/ui.jsx';
 
 const fmt = (iso) => new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
@@ -203,7 +203,7 @@ export function PendingView({ gmail, onConnect, onCountChange }) {
     }
   };
 
-  if (err) return <p className="hz-notice" role="alert" style={{ margin: '0 26px 26px' }}>{err}</p>;
+  if (err) return <p className="hz-notice" role="alert" style={{ margin: '0 var(--pad-x) 26px' }}>{err}</p>;
   if (!items) return <Spinner />;
   return (
     <>
@@ -214,7 +214,7 @@ export function PendingView({ gmail, onConnect, onCountChange }) {
         </div>
       )}
       {!scan?.running && (
-        <div style={{ padding: '0 26px 18px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ padding: '0 var(--pad-x) 18px', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
           <button type="button" className="hz-btn hz-btn-sm" onClick={startScan}>Şimdi tara</button>
           <span className="hz-small">Günde en fazla 3 tarama yapılabilir; her tarama farklı aramalarla yeni ilanlara bakar.</span>
         </div>
@@ -233,7 +233,7 @@ export function SentView() {
   const [items, setItems] = useState(null);
   const [err, setErr] = useState(null);
   useEffect(() => { listApplications('sent,skipped,replied,interview,rejected').then(({ items }) => setItems(items)).catch((e) => setErr(e.message)); }, []);
-  if (err) return <p className="hz-notice" role="alert" style={{ margin: '0 26px 26px' }}>{err}</p>;
+  if (err) return <p className="hz-notice" role="alert" style={{ margin: '0 var(--pad-x) 26px' }}>{err}</p>;
   if (!items) return <Spinner />;
   if (!items.length) return <div className="hz-empty"><p>Henüz gönderilmiş başvuru yok. Onayladığın başvurular burada listelenecek.</p></div>;
   return (
@@ -254,6 +254,18 @@ export function SentView() {
 
 // ---- İş alarmlarından gelen ilanlar ------------------------------------------------
 const SOURCE = { linkedin: 'LinkedIn', kariyer: 'Kariyer.net', other: 'İş alarmı' };
+const GMAIL_FORWARDING = 'https://mail.google.com/mail/u/0/#settings/fwdandpop';
+// Gmail'in "filtre oluştur" penceresini LinkedIn ve Kariyer.net göndericileri dolu olarak açar.
+const GMAIL_FILTER = 'https://mail.google.com/mail/u/0/#create-filter/from=jobalerts-noreply%40linkedin.com+OR+jobs-noreply%40linkedin.com+OR+kariyer.net';
+const TR_ASCII = { ç: 'c', ğ: 'g', ı: 'i', i: 'i', ö: 'o', ş: 's', ü: 'u' };
+const slug = (s) => s.toLocaleLowerCase('tr').replace(/[çğıiöşü]/g, (c) => TR_ASCII[c]).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const linkedinSearch = (role, city) => `https://www.linkedin.com/jobs/search/?keywords=${encodeURIComponent(role)}&location=${encodeURIComponent(city || 'Türkiye')}`;
+const kariyerSearch = (role) => `https://www.kariyer.net/is-ilanlari/${slug(role)}`;
+const ago = (iso) => {
+  if (!iso) return '';
+  const h = Math.round((Date.now() - new Date(iso).getTime()) / 3600000);
+  return h < 1 ? 'az önce' : h < 24 ? `${h} saat önce` : `${Math.round(h / 24)} gün önce`;
+};
 
 function CopyAddress({ address }) {
   const [copied, setCopied] = useState(false);
@@ -263,55 +275,144 @@ function CopyAddress({ address }) {
   return (
     <div className="hz-alert-address">
       <code>{address}</code>
-      <button type="button" className="hz-btn hz-btn-sm" onClick={copy}>{copied ? 'Kopyalandı' : 'Kopyala'}</button>
+      <button type="button" className="hz-btn hz-btn-sm" onClick={copy}>{copied ? 'Kopyalandı ✓' : 'Kopyala'}</button>
     </div>
   );
 }
 
-function AlertSetup({ address, open }) {
+function GuideStep({ n, done, title, children }) {
   return (
-    <details className="hz-alert-setup" open={open}>
-      <summary>LinkedIn ve Kariyer.net alarmlarını nasıl bağlarım?</summary>
-      <p className="hz-small">Bu adres sana özel. Alarm e-postalarını buraya yönlendirdiğinde asistan ilanları CV'ne göre puanlar. Bu sitelere otomatik başvuru yapılmaz; uygun ilana sen gidip başvurursun.</p>
-      <CopyAddress address={address} />
-      <ol className="hz-steps">
-        <li>LinkedIn'de (İşler → İş alarmları) ve Kariyer.net'te aradığın pozisyon için e-posta alarmı kur.</li>
-        <li>Gmail'de <strong>Ayarlar → Tüm ayarları görüntüle → Yönlendirme ve POP/IMAP → Yönlendirme adresi ekle</strong>'ye yukarıdaki adresi yaz.</li>
-        <li>Gmail bu adrese bir onay e-postası gönderir. Onay bağlantısı ve kodu birkaç dakika içinde <strong>Gelen kutusu</strong> sekmesine düşer; bağlantıyı aç.</li>
-        <li>Tüm yazılarını değil yalnızca alarmları yönlendirmek için Gmail'de bir filtre oluştur: <em>Kimden</em> alanına <code>jobalerts-noreply@linkedin.com OR kariyer.net</code> yaz, "Filtre oluştur"a bas ve <strong>"Şu adrese yönlendir"</strong> seçeneğinde bu adresi seç. Yönlendirmeyi genel olarak açmana gerek yok.</li>
-      </ol>
-    </details>
+    <li className="hz-guide-step" data-done={done || undefined}>
+      <span className="hz-guide-dot" aria-hidden="true">{done ? '✓' : n}</span>
+      <div className="hz-guide-body">
+        <h4>{title}{done && <span className="hz-sr"> (tamamlandı)</span>}</h4>
+        {children}
+      </div>
+    </li>
   );
+}
+
+/** LinkedIn ve Kariyer.net alarmlarını bağlama rehberi: her adım tek dokunuşla doğru sayfayı açar. */
+function AlertGuide({ address, setup = {} }) {
+  const connected = !!setup.lastAlertAt;
+  const [open, setOpen] = useState(!connected);
+  const roles = setup.roles?.length ? setup.roles : ['İş Analisti'];
+  const city = setup.cities?.[0];
+  const doneCount = [connected, !!setup.confirmAt || connected, connected].filter(Boolean).length;
+  return (
+    <section className="hz-guide" data-open={open || undefined}>
+      <button type="button" className="hz-guide-head" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+        <span className="hz-guide-badge" data-on={connected || undefined}>{connected ? 'Bağlı' : `${doneCount}/3`}</span>
+        <span className="hz-guide-title">
+          <strong>{connected ? 'LinkedIn ve Kariyer.net alarmları bağlı' : 'LinkedIn ve Kariyer.net alarmlarını bağla'}</strong>
+          <small>{connected ? `Son alarm ${ago(setup.lastAlertAt)} geldi` : 'Üç adım, yaklaşık iki dakika'}</small>
+        </span>
+        <span className="hz-guide-chev" aria-hidden="true" />
+      </button>
+      {open && (
+        <div className="hz-guide-content">
+          <p className="hz-small">Alarm e-postaların sana özel adrese gelir, asistan ilanları CV'ne göre puanlar ve kapanan ilanları ayıklar. Bu sitelere otomatik başvuru yapılmaz; uygun ilana sen başvurursun.</p>
+          <p className="hz-guide-mobile">Gmail ayarları telefon uygulamasında yok. 2. ve 3. adımı bilgisayardan ya da telefonun tarayıcısından yap.</p>
+          <ol className="hz-guide-steps">
+            <GuideStep n={1} done={connected} title="Alarm kur">
+              <p>Aşağıdan rolünü seç. LinkedIn'de arama sonuçlarının üstündeki <b>İş alarmı</b> anahtarını aç; Kariyer.net'te <b>Aramayı kaydet</b> deyip e-posta bildirimini seç.</p>
+              <div className="hz-guide-links">
+                {roles.map((r) => (
+                  <React.Fragment key={r}>
+                    <a className="hz-pill" href={linkedinSearch(r, city)} target="_blank" rel="noreferrer noopener"><span className="hz-pill-src">LinkedIn</span>{r}</a>
+                    <a className="hz-pill" href={kariyerSearch(r)} target="_blank" rel="noreferrer noopener"><span className="hz-pill-src">Kariyer.net</span>{r}</a>
+                  </React.Fragment>
+                ))}
+              </div>
+            </GuideStep>
+            <GuideStep n={2} done={!!setup.confirmAt || connected} title="Adresini Gmail'e ekle">
+              <CopyAddress address={address} />
+              <p>Gmail'de <b>Yönlendirme adresi ekle</b>'ye bas, adresi yapıştır, <b>İleri → Devam</b> de. "Tüm postaları yönlendir"i seçmene gerek yok.</p>
+              <div className="hz-guide-links">
+                <a className="hz-btn hz-btn-sm" href={GMAIL_FORWARDING} target="_blank" rel="noreferrer noopener">Gmail yönlendirme ayarını aç ↗</a>
+                {setup.confirmUrl && !connected && <a className="hz-btn hz-btn-posta hz-btn-sm" href={setup.confirmUrl} target="_blank" rel="noreferrer noopener">Gmail onayını ver ↗</a>}
+              </div>
+              {setup.confirmAt && !connected && <p className="hz-small">Gmail'in onay e-postası bize ulaştı. Yukarıdaki <b>Gmail onayını ver</b> düğmesine basıp <b>Onayla</b> de.</p>}
+            </GuideStep>
+            <GuideStep n={3} done={connected} title="Yalnızca alarmları yönlendir">
+              <p>Bu düğme Gmail'de filtreyi LinkedIn ve Kariyer.net için doldurulmuş açar. <b>Filtre oluştur</b> → <b>Şu adrese yönlendir</b>'i işaretle, adresini seç → <b>Filtre oluştur</b>.</p>
+              <div className="hz-guide-links">
+                <a className="hz-btn hz-btn-posta hz-btn-sm" href={GMAIL_FILTER} target="_blank" rel="noreferrer noopener">Filtreyi hazır aç ↗</a>
+              </div>
+              {!connected && <p className="hz-small">İlk alarm e-postası geldiğinde bu adımlar kendiliğinden işaretlenir.</p>}
+            </GuideStep>
+          </ol>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ListingStatus({ job }) {
+  if (job.status === 'closed') return <span className="hz-state" data-state="closed" title={job.closed_reason || ''}>Başvuruya kapandı</span>;
+  if (job.status === 'open') return <span className="hz-state" data-state="open">Başvuru alıyor</span>;
+  return null;
 }
 
 export function ListingsView() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
-  useEffect(() => { listAlerts().then(setData).catch((e) => setErr(e.message)); }, []);
+  const [checking, setChecking] = useState(false);
+  const [show, setShow] = useState('open');
+  useEffect(() => {
+    let alive = true;
+    listAlerts()
+      .then((d) => {
+        if (!alive) return;
+        setData(d);
+        if (!d.items?.length) return;
+        // Kapanan ilanları arka planda kontrol et; liste o sırada kullanılabilir.
+        setChecking(true);
+        checkAlerts()
+          .then((r) => { if (alive && r.items) setData((cur) => ({ ...cur, items: r.items })); })
+          .catch(() => {})
+          .finally(() => alive && setChecking(false));
+      })
+      .catch((e) => setErr(e.message));
+    return () => { alive = false; };
+  }, []);
   const hide = async (id) => {
     try { await removeAlert(id); setData((d) => ({ ...d, items: d.items.filter((j) => j.id !== id) })); } catch (e) { setErr(e.message); }
   };
-  if (err) return <p className="hz-notice" role="alert" style={{ margin: '0 26px 26px' }}>{err}</p>;
+  if (err) return <p className="hz-notice" role="alert" style={{ margin: '0 var(--pad-x) 26px' }}>{err}</p>;
   if (!data) return <Spinner />;
   if (!data.address) return <div className="hz-empty"><p>LinkedIn ve Kariyer.net alarmlarını bağlama özelliği çok yakında açılacak.</p></div>;
+  const closed = data.items.filter((j) => j.status === 'closed');
+  const active = data.items.filter((j) => j.status !== 'closed');
+  const list = show === 'closed' ? closed : active;
   return (
     <div className="hz-listings">
-      <div style={{ padding: '0 26px 18px' }}><AlertSetup address={data.address} open={!data.items.length} /></div>
+      <div className="hz-pad-x"><AlertGuide address={data.address} setup={data.setup} /></div>
+      {data.items.length > 0 && (
+        <div className="hz-filter hz-pad-x" role="tablist" aria-label="İlan durumu">
+          <button type="button" role="tab" aria-selected={show === 'open'} onClick={() => setShow('open')}>Açık <b>{active.length}</b></button>
+          <button type="button" role="tab" aria-selected={show === 'closed'} onClick={() => setShow('closed')}>Kapanan <b>{closed.length}</b></button>
+          {checking && <span className="hz-meta hz-checking"><span className="hz-spin" />Kapanan ilanlar kontrol ediliyor</span>}
+        </div>
+      )}
       {!data.items.length ? (
         <div className="hz-empty"><p>Henüz yönlendirilen ilan yok. Alarm e-postaları gelmeye başlayınca ilanlar puanlarıyla burada görünecek.</p></div>
+      ) : !list.length ? (
+        <div className="hz-empty"><p>{show === 'closed' ? 'Başvuruya kapanmış ilan yok.' : 'Açık ilan kalmadı. Yeni alarmlar geldikçe burada görünecek.'}</p></div>
       ) : (
         <ul className="hz-apps">
-          {data.items.map((j) => (
-            <li key={j.id} className="hz-app">
+          {list.map((j) => (
+            <li key={j.id} className="hz-app" data-closed={j.status === 'closed' || undefined}>
               <div className="hz-app-head">
                 <h3>{j.title}</h3>
                 {j.score != null && <span className="hz-score" title="CV'ne uygunluk puanı">{j.score}</span>}
                 <p>{[j.company, j.location, SOURCE[j.source] || j.source, fmt(j.received_at)].filter(Boolean).join(' · ')}</p>
               </div>
+              <ListingStatus job={j} />
               {j.reason && <p className="hz-small">{j.reason}</p>}
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div className="hz-app-foot">
                 <a className="hz-source" href={j.url} target="_blank" rel="noreferrer noopener">
-                  <span className="hz-source-label">İlana git</span>
+                  <span className="hz-source-label">{j.status === 'closed' ? 'İlanı gör' : 'İlana git'}</span>
                   <span className="hz-source-url">{shortUrl(j.url)}</span>
                   <span aria-hidden="true">↗</span>
                 </a>

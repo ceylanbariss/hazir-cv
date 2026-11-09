@@ -9,6 +9,7 @@ import { createApp } from '../src/app.js';
 import { canonicalJobUrl, extractJobs, parseForwardingConfirmation, findAlertCode, detectSource, htmlToText, handleInboundEmail } from '../src/automation/alerts.js';
 import { verifySvix } from '../src/automation/mailer.js';
 import { buildSummary, sendDailySummary } from '../src/automation/summary.js';
+import { judgeListing, checkUrlFor, createListingChecker, refreshListings, parseTrDate } from '../src/automation/liveness.js';
 
 const UID = '33333333-3333-4333-8333-333333333333';
 const CODE = 'abc123def4';
@@ -24,6 +25,7 @@ function fakeSupabase() {
     return rows.filter((r) =>
       [...p.entries()].every(([k, v]) => {
         if (['select', 'order', 'limit', 'on_conflict'].includes(k)) return true;
+        if (k === 'or' && v === '(status.is.null,status.neq.closed)') return r.status == null || r.status !== 'closed';
         if (v.startsWith('eq.')) return String(r[k]) === v.slice(3);
         if (v.startsWith('neq.')) return String(r[k]) !== v.slice(4);
         if (v.startsWith('gte.')) return typeof r[k] === 'number' ? r[k] >= Number(v.slice(4)) : r[k] != null && String(r[k]) >= v.slice(4);
@@ -71,11 +73,14 @@ const RECEIVED = {
 };
 
 let server, base, sb, mailer;
+// Ağa çıkmayan sahte kontrol: 4099999999 kapanmış, diğerleri açık.
+const checked = [];
+const fakeChecker = async (url) => { checked.push(url); return /4099999999/.test(url) ? { status: 'closed', reason: 'başvuruya kapandı' } : { status: 'open', reason: 'başvuru alıyor' }; };
 before(async () => {
   sb = fakeSupabase();
   mailer = fakeMailer(RECEIVED);
   const config = loadConfig({ LLM_PROVIDER: 'mock', NODE_ENV: 'test', CRON_SECRET: SECRET, RESEND_WEBHOOK_SECRET: WHSEC, APP_URL: 'https://hazircv.com.tr' });
-  const app = createApp({ config, llm: createMockProvider(), logger: createLogger('silent'), supabase: sb, mailer });
+  const app = createApp({ config, llm: createMockProvider(), logger: createLogger('silent'), supabase: sb, mailer, checkListing: fakeChecker });
   await new Promise((r) => (server = app.listen(0, r)));
   base = `http://127.0.0.1:${server.address().port}/api/v1/automation`;
   sb.db.profiles.push({ id: UID, email: 'c@x.com', full_name: 'Ceren Deneme', alert_code: CODE, setup_step: 6, status: 'active', kvkk_accepted_at: new Date().toISOString() });
@@ -234,4 +239,98 @@ test('daily summary: sent once a day, only with news, respects the opt-out', asy
   const r = await fetch(`${base}/me`, { method: 'PATCH', headers: { Authorization: 'Bearer tok', 'Content-Type': 'application/json' }, body: JSON.stringify({ daily_summary: false }) });
   assert.equal(r.status, 200);
   assert.equal(sb.db.profiles[0].daily_summary, false);
+});
+
+
+// ---- İlan hâlâ başvuru alıyor mu? -------------------------------------------------
+const NOW = new Date('2026-11-09T12:00:00Z');
+const KARIYER_OPEN = `<html><head><title>İş Analisti İş İlanı</title></head><body>${'x'.repeat(600)} <div class="job-detail">İş Analisti</div><button>İlana Başvur</button><script>var d={closingDate:"30.11.2026"}</script></body></html>`;
+const KARIYER_CLOSED = `<html><body>${'x'.repeat(600)} <div class="warning">Bu ilan başvuruları artık kabul etmiyor.</div> Hemen ilanlara başvur!</body></html>`;
+const KARIYER_EXPIRED = `<html><body>${'x'.repeat(600)} İş İlanı <button>İlana Başvur</button> closingDate:31.10.2026</body></html>`;
+const LI_OPEN = `<section class="top-card-layout">${'x'.repeat(600)}<div class="show-more-less-html">Açıklama</div><button>Apply</button></section>`;
+const LI_CLOSED = `<section class="top-card-layout">${'x'.repeat(600)}<figure class="closed-job"><span>No longer accepting applications</span></figure></section>`;
+
+test('listing status: Kariyer.net and LinkedIn pages are classified, unsure cases stay unknown', () => {
+  const k = (html, extra = {}) => judgeListing({ source: 'kariyer', status: 200, finalUrl: 'https://www.kariyer.net/is-ilani/x-1', html, now: NOW, ...extra }).status;
+  assert.equal(k(KARIYER_OPEN), 'open');
+  assert.equal(k(KARIYER_CLOSED), 'closed');
+  assert.equal(k(KARIYER_EXPIRED), 'closed'); // son başvuru tarihi geçmiş
+  assert.equal(k(KARIYER_OPEN, { finalUrl: 'https://www.kariyer.net/is-ilanlari' }), 'closed'); // ilan yerine aramaya yönlendirildi
+  assert.equal(k('', { status: 404 }), 'closed');
+  assert.equal(k('', { status: 429 }), 'unknown');
+  assert.equal(k('<html>kısa</html>'), 'unknown');
+  const l = (html, extra = {}) => judgeListing({ source: 'linkedin', status: 200, finalUrl: 'https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/1', html, now: NOW, ...extra }).status;
+  assert.equal(l(LI_OPEN), 'open');
+  assert.equal(l(LI_CLOSED), 'closed');
+  assert.equal(l('', { status: 999 }), 'unknown'); // LinkedIn engeli: kapandı denmez
+  assert.equal(l(LI_OPEN, { finalUrl: 'https://www.linkedin.com/authwall?x' }), 'unknown');
+  assert.equal(parseTrDate('31.10.2026').toISOString(), '2026-10-31T20:59:59.000Z');
+  assert.equal(parseTrDate('bozuk'), null);
+});
+
+test('listing checker: guest URL for LinkedIn, follows redirects only on the two sites', async () => {
+  assert.deepEqual(checkUrlFor('https://www.linkedin.com/comm/jobs/view/4012345678/?trk=1'), { source: 'linkedin', url: 'https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4012345678' });
+  assert.equal(checkUrlFor('https://example.com/job'), null);
+  const asked = [];
+  const pages = {
+    'https://www.kariyer.net/is-ilani/analist-1': { status: 301, location: '/is-ilanlari' },
+    'https://www.kariyer.net/is-ilanlari': { status: 200, body: KARIYER_OPEN },
+    'https://www.linkedin.com/jobs-guest/jobs/api/jobPosting/4012345678': { status: 200, body: LI_CLOSED },
+    'https://www.kariyer.net/is-ilani/kacak-2': { status: 302, location: 'https://evil.example.com/x' },
+  };
+  const fetchImpl = async (url) => {
+    asked.push(url);
+    const p = pages[url] || { status: 404 };
+    return { status: p.status, headers: { get: (h) => (h === 'location' ? p.location || null : null) }, text: async () => p.body || '' };
+  };
+  const check = createListingChecker({ fetchImpl });
+  assert.equal((await check('https://www.kariyer.net/is-ilani/analist-1', NOW)).status, 'closed');
+  assert.equal((await check('https://www.linkedin.com/jobs/view/4012345678/', NOW)).status, 'closed');
+  assert.equal((await check('https://www.kariyer.net/is-ilani/kacak-2', NOW)).status, 'unknown');
+  assert.ok(!asked.some((u) => u.includes('evil.example.com')));
+  assert.equal((await check('https://example.com/job', NOW)).reason, 'desteklenmeyen kaynak');
+  const failing = createListingChecker({ fetchImpl: async () => { throw new Error('timeout'); } });
+  assert.equal((await failing('https://www.kariyer.net/is-ilani/x-1', NOW)).status, 'unknown');
+});
+
+test('closed listings: refreshed in the background, marked in İlanlar, left out of the summary', async () => {
+  const fresh = new Date();
+  sb.db.alert_jobs = sb.db.alert_jobs.filter((j) => j.user_id !== UID);
+  sb.db.inbox_items = sb.db.inbox_items.filter((i) => i.kind !== 'daily_summary');
+  sb.db.applications = [];
+  sb.db.profiles[0].daily_summary = true;
+  sb.db.alert_jobs.push(
+    { id: randomUUID(), user_id: UID, source: 'linkedin', title: 'İş Analisti', url: 'https://www.linkedin.com/jobs/view/4012345678/', score: 80, received_at: fresh.toISOString() },
+    { id: randomUUID(), user_id: UID, source: 'linkedin', title: 'Satış Temsilcisi', url: 'https://www.linkedin.com/jobs/view/4099999999/', score: 70, received_at: fresh.toISOString() },
+    { id: randomUUID(), user_id: UID, source: 'kariyer', title: 'Eski', url: 'https://www.kariyer.net/is-ilani/eski-1', score: 60, received_at: '2026-01-01T00:00:00.000Z' },
+  );
+  checked.length = 0;
+  const r = await fetch(`${base}/alerts/check`, { method: 'POST', headers: { Authorization: 'Bearer tok' } });
+  assert.equal(r.status, 200);
+  const data = await r.json();
+  assert.equal(data.checked, 2); // 45 günden eski ilan kontrol edilmez
+  assert.equal(data.closed, 1);
+  assert.equal(data.items.find((j) => j.title === 'Satış Temsilcisi').status, 'closed');
+  assert.equal(data.items.find((j) => j.title === 'İş Analisti').status, 'open');
+
+  // Dakikada bir kontrol; hemen tekrar çağrılırsa yalnızca liste döner.
+  const again = await (await fetch(`${base}/alerts/check`, { method: 'POST', headers: { Authorization: 'Bearer tok' } })).json();
+  assert.equal(again.skipped, 'throttled');
+  // 12 saat geçmeden aynı ilan tekrar kontrol edilmez; kapanmış ilan hiç tekrar edilmez.
+  const r2 = await refreshListings({ supabase: sb, checkListing: fakeChecker, userId: UID, now: new Date(fresh.getTime() + 3600_000) });
+  assert.equal(r2.checked, 0);
+  const r3 = await refreshListings({ supabase: sb, checkListing: fakeChecker, userId: UID, now: new Date(fresh.getTime() + 13 * 3600_000) });
+  assert.equal(r3.checked, 1);
+
+  const mail = await sendDailySummary({ supabase: sb, mailer, config: { APP_URL: 'https://hazircv.com.tr' }, userId: UID, now: fresh, stats: { searches: 1, drafted: 0 } });
+  assert.equal(mail.sent, true);
+  assert.equal(mail.alerts, 1);
+  assert.doesNotMatch(mailer.sent.at(-1).text, /Satış Temsilcisi/);
+
+  // Kurulum rehberi bilgileri: onay bağlantısı ve son alarm zamanı.
+  const list = await (await fetch(`${base}/alerts`, { headers: { Authorization: 'Bearer tok' } })).json();
+  assert.ok(list.setup);
+  assert.match(list.setup.confirmUrl || '', /mail-settings\.google\.com/);
+  assert.ok(list.setup.lastAlertAt);
+  assert.ok(Array.isArray(list.setup.roles));
 });

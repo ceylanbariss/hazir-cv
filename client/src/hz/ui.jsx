@@ -28,9 +28,9 @@ export function Wordmark({ to = '/' }) {
   );
 }
 
-export function TopBar({ children }) {
+export function TopBar({ children, sticky = false }) {
   return (
-    <header className="hz-wrap hz-bar">
+    <header className={`hz-wrap hz-bar${sticky ? ' hz-bar-sticky' : ''}`}>
       <Wordmark />
       {children && <div style={{ display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap' }}>{children}</div>}
     </header>

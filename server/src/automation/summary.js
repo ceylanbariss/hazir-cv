@@ -75,10 +75,11 @@ export async function sendDailySummary({ supabase, mailer, config, userId, log, 
   const pending = await supabase.select('applications', `user_id=eq.${uid}&status=eq.pending_approval&select=company,position,score&order=score.desc.nullslast&limit=15`);
   // Bugün zaten özet gittiyse yalnızca o özetten sonra gelen ilanlar listelenir (aynı ilan iki kez gelmesin).
   const since = last || new Date(now.getTime() - 24 * 3600 * 1000).toISOString();
-  const alerts = await supabase.select(
-    'alert_jobs',
-    `user_id=eq.${uid}&received_at=gte.${enc(since)}&select=title,company,score,url,source&order=score.desc.nullslast&limit=${ALERT_LIMIT}`,
-  );
+  const alertQ = `user_id=eq.${uid}&received_at=gte.${enc(since)}&select=title,company,score,url,source&order=score.desc.nullslast&limit=${ALERT_LIMIT}`;
+  // Başvuruya kapandığı anlaşılan ilanlar özete girmez (durum sütunu yoksa hepsi listelenir).
+  const alerts = await supabase
+    .select('alert_jobs', `${alertQ}&or=(status.is.null,status.neq.closed)`)
+    .catch(() => supabase.select('alert_jobs', alertQ));
   if (last && !(stats?.drafted > 0) && !alerts.length) return { sent: false, reason: 'already_sent' };
   // İlk zamanlanmış taramadan sonra (stats var) yeni bir şey olmasa da kısa bir özet gider; elle çağrıda gitmez.
   if (!pending.length && !alerts.length && !stats) return { sent: false, reason: 'nothing_new' };

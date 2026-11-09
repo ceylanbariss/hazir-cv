@@ -85,12 +85,23 @@ export function Consent({ onAccept, email, onSignOut }) {
 }
 
 // ---- Panel ------------------------------------------------------------------
+const ICON = {
+  inbox: <><path d="M4 13.5 6.6 6h10.8l2.6 7.5V18a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18z" /><path d="M4 13.5h4.6l1.1 2h4.6l1.1-2H20" /></>,
+  today: <><circle cx="12" cy="12" r="8.5" /><path d="m8.4 12.3 2.5 2.5 4.8-5.1" /></>,
+  applications: <><path d="M20.5 3.5 3.6 10.4l6.6 2.9 2.9 6.6z" /><path d="m10.2 13.3 4.4-4.4" /></>,
+  listings: <><rect x="3.5" y="7" width="17" height="12.5" rx="2" /><path d="M9 7V5.6A1.6 1.6 0 0 1 10.6 4h2.8A1.6 1.6 0 0 1 15 5.6V7M3.5 12.6h17" /></>,
+  settings: <><path d="M4.5 6.5h8M17.5 6.5h2M4.5 12h3M11.5 12h8M4.5 17.5h10M18.5 17.5h1" /><circle cx="15" cy="6.5" r="2.2" /><circle cx="9.5" cy="12" r="2.2" /><circle cx="16.5" cy="17.5" r="2.2" /></>,
+};
+const Icon = ({ name }) => (
+  <svg className="hz-nav-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{ICON[name]}</svg>
+);
+// [kimlik, başlık, telefonda alt çubuktaki kısa ad]
 const TABS = [
-  ['inbox', 'Gelen kutusu'],
-  ['today', 'Onay bekleyenler'],
-  ['applications', 'Başvurular'],
-  ['listings', 'İlanlar'],
-  ['settings', 'Ayarlar'],
+  ['inbox', 'Gelen kutusu', 'Gelen'],
+  ['today', 'Onay bekleyenler', 'Onay'],
+  ['applications', 'Başvurular', 'Başvurular'],
+  ['listings', 'İlanlar', 'İlanlar'],
+  ['settings', 'Ayarlar', 'Ayarlar'],
 ];
 
 /** Body text with plain URLs turned into links (e.g. Gmail forwarding confirmation). */
@@ -179,25 +190,26 @@ export function Panel({ profile, unread, setUnread, onSignOut, onStartSetup, inb
   const onConnect = useCallback(() => { setConnectErr(null); startGmailConnect().catch((e) => setConnectErr(e.message)); }, []);
   return (
     <Shell>
-      <TopBar>
+      <TopBar sticky>
         <span className="hz-small hz-ui">{profile.email}</span>
         <button type="button" className="hz-link" onClick={onSignOut}>Çıkış yap</button>
       </TopBar>
-      <main className="hz-wrap">
+      <main className="hz-wrap hz-panel-main">
         {notice && <p className={notice[0] === 'ok' ? 'hz-ok' : 'hz-notice'} role="status" style={{ marginBottom: 20 }}>{notice[1]}</p>}
         {connectErr && <p className="hz-notice" role="alert" style={{ marginBottom: 20 }}>{connectErr}</p>}
         <SetupCallout profile={profile} onStart={onStartSetup} gmail={gmail} onConnect={onConnect} />
         <div className="hz-panel">
           <nav className="hz-nav" aria-label="Panel">
-            {TABS.map(([id, label]) => (
-              <button key={id} type="button" aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>
-                {label}
+            {TABS.map(([id, label, short]) => (
+              <button key={id} type="button" aria-current={tab === id ? 'page' : undefined} aria-label={label} onClick={() => { setTab(id); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
+                <Icon name={id} />
+                <span className="hz-nav-label" data-short={short}>{label}</span>
                 {id === 'inbox' && unread > 0 && <span className="hz-count" aria-label={`${unread} okunmamış`}>{unread}</span>}
               </button>
             ))}
           </nav>
           <section className="hz-sheet" aria-labelledby="panel-title">
-            <h1 id="panel-title" className="hz-h2" style={{ padding: '22px 26px 6px' }}>{TABS.find((t) => t[0] === tab)[1]}</h1>
+            <h1 id="panel-title" className="hz-h2 hz-panel-title">{TABS.find((t) => t[0] === tab)[1]}</h1>
             {tab === 'inbox' && (inbox ? <InboxList items={inbox} /> : <InboxView onRead={onRead} />)}
             {tab === 'today' && (profile.setup_step >= 6 ? <PendingView gmail={gmail} onConnect={onConnect} /> : <Later text="Kurulumu tamamladığında her gün hazırlanan başvurular burada onayını bekleyecek." />)}
             {tab === 'applications' && <SentView />}
