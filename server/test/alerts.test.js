@@ -8,7 +8,7 @@ import { createMockProvider } from '../src/llm/mock.js';
 import { createApp } from '../src/app.js';
 import { canonicalJobUrl, extractJobs, parseForwardingConfirmation, findAlertCode, detectSource, htmlToText, handleInboundEmail } from '../src/automation/alerts.js';
 import { verifySvix } from '../src/automation/mailer.js';
-import { buildSummary, sendDailySummary } from '../src/automation/summary.js';
+import { buildSummary, sendDailySummary, summaryHeadline } from '../src/automation/summary.js';
 import { judgeListing, checkUrlFor, createListingChecker, refreshListings, parseTrDate } from '../src/automation/liveness.js';
 
 const UID = '33333333-3333-4333-8333-333333333333';
@@ -144,9 +144,11 @@ test('svix signatures: valid, tampered, expired', () => {
 
 test('summary e-mail lists pending applications and alert jobs, HTML-escaped', () => {
   const m = buildSummary({ name: 'Ceren Deneme', appUrl: 'https://hazircv.com.tr', stats: { searches: 4, pages: 12, drafted: 1 }, pending: [{ company: 'Atlas <b>', position: 'İş Analisti', score: 82 }], alerts: [{ title: 'Veri Analisti', company: 'Nova', score: 75, url: 'https://www.linkedin.com/jobs/view/1/', source: 'linkedin' }] });
-  assert.equal(m.subject, 'Hazır CV · 1 başvuru onayını bekliyor, 1 yeni ilan');
+  assert.equal(m.subject, 'Ceren, 1 başvurun onay bekliyor, 1 yeni ilan da sana çok uygun');
+  assert.match(m.preview, /^Atlas <b> · İş Analisti için ön yazın hazır/);
+  assert.match(m.html, /display:none[^>]*>Atlas &lt;b&gt; · İş Analisti için ön yazın hazır/); // bildirimde görünen ön izleme
   assert.match(m.text, /Merhaba Ceren,/);
-  assert.match(m.text, /Son tarama: 4 arama, 12 sayfa incelendi, 1 başvuru hazırlandı\./);
+  assert.match(m.text, /Bugün senin için 4 arama yaptım, 12 şirket sayfasını inceledim ve 1 başvuru hazırladım\./);
   assert.match(m.text, /• Atlas <b> · İş Analisti \(82 puan\)/);
   assert.match(m.html, /Atlas &lt;b&gt;/);
   assert.doesNotMatch(m.html, /Atlas <b>/);
@@ -212,7 +214,7 @@ test('daily summary: sent once a day, only with news, respects the opt-out', asy
   const mail = mailer.sent.at(-1);
   assert.equal(mail.to, 'c@x.com');
   assert.match(mail.text, /İş Analisti – Atlas Yazılım \(80 puan\)/);
-  assert.match(mail.text, /Diğer ilanlar:\n• Satış Temsilcisi – Kuzey A\.Ş\. \(30 puan\)/);
+  assert.match(mail.text, /DİĞER İLANLAR \(puanı düşük kalanlar\)\n• Satış Temsilcisi – Kuzey A\.Ş\. \(30 puan\)/);
   assert.ok(mail.text.indexOf('İş Analisti') < mail.text.indexOf('Satış Temsilcisi'));
   assert.equal((await sendDailySummary({ supabase: sb, mailer, config: cfg, userId: UID, now })).reason, 'already_sent');
   // Aynı gün sonraki tarama: yeni taslak yoksa ikinci e-posta gitmez, yeni taslak varsa gider.
@@ -227,8 +229,8 @@ test('daily summary: sent once a day, only with news, respects the opt-out', asy
   assert.equal((await sendDailySummary({ supabase: sb, mailer, config: cfg, userId: UID, now: tomorrow })).reason, 'nothing_new');
   const quiet = await sendDailySummary({ supabase: sb, mailer, config: cfg, userId: UID, now: tomorrow, stats: { searches: 6, pages: 3, drafted: 0 } });
   assert.equal(quiet.sent, true);
-  assert.equal(mailer.sent.at(-1).subject, 'Hazır CV · Bugün yeni ilan yok');
-  assert.match(mailer.sent.at(-1).text, /6 arama, 3 sayfa/);
+  assert.match(mailer.sent.at(-1).subject, /bugün sana uygun yeni ilan çıkmadı$/i);
+  assert.match(mailer.sent.at(-1).text, /6 arama yaptım, 3 şirket sayfasını/);
 
   sb.db.inbox_items = sb.db.inbox_items.filter((i) => i.kind !== 'daily_summary');
   sb.db.profiles[0].daily_summary = false;
@@ -333,4 +335,14 @@ test('closed listings: refreshed in the background, marked in İlanlar, left out
   assert.match(list.setup.confirmUrl || '', /mail-settings\.google\.com/);
   assert.ok(list.setup.lastAlertAt);
   assert.ok(Array.isArray(list.setup.roles));
+});
+
+test('summary subject greets by first name and names the best match', () => {
+  const good = [{ title: 'Junior Software Engineer', company: 'Insider One', score: 95 }, { title: 'CRM Analyst', company: 'Trendyol', score: 90 }, { title: 'İş Analisti', company: 'AloTech', score: 88 }, { title: 'Analist', company: 'Nova', score: 70 }];
+  const h = summaryHeadline({ name: 'Barış Ceylan', pending: [], good, rest: [] });
+  assert.equal(h.subject, 'Barış, sana uygun 4 yeni ilan buldum, en iyisi Insider One (95 puan) 🎯');
+  assert.equal(h.preview, 'En uygunu: Junior Software Engineer – Insider One (95 puan). Ayrıca Trendyol, AloTech ve dahası.');
+  assert.equal(summaryHeadline({ name: '', pending: [], good: [], rest: [] }).subject, 'Bugün sana uygun yeni ilan çıkmadı');
+  assert.equal(summaryHeadline({ name: 'Ali', pending: [], good: [], rest: [{ title: 'x', score: 10 }] }).subject, 'Ali, 1 yeni ilan geldi, ama hiçbiri tam sana göre değil');
+  assert.equal(summaryHeadline({ name: 'Ali', pending: [{ company: 'Atlas', position: 'Analist' }], good: [], rest: [] }).subject, 'Ali, 1 başvurun hazır, göndermek için onayını bekliyor');
 });
