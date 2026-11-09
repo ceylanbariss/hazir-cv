@@ -14,6 +14,7 @@ import { runForUser, listDueUsers, dayStart, autoSlots } from '../automation/wor
 import { handleInboundEmail } from '../automation/alerts.js';
 import { sendDailySummary } from '../automation/summary.js';
 import { verifySvix } from '../automation/mailer.js';
+import { refreshListings } from '../automation/liveness.js';
 
 const uid = (req) => encodeURIComponent(req.user.id);
 const MAX_CVS = 3;
@@ -89,7 +90,7 @@ const secretMatches = (given, expected) => {
 
 const pdfName = (fullName) => `${(fullName || 'CV').trim().replace(/\s+/g, '_')}_CV.pdf`;
 
-export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget, config = {}, gmail = null, sealer = null, search = null, readPage = null, mailer = null }) {
+export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget, config = {}, gmail = null, sealer = null, search = null, readPage = null, mailer = null, checkListing = null }) {
   const router = express.Router();
   const json = express.json({ limit: '50kb' });
   const jsonUpload = express.json({ limit: '8mb' });
@@ -140,8 +141,10 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget,
   /** Zamanlanmış tarama + ardından günlük özet (Hazır CV adresinden). */
   async function scheduledRun(userId, log) {
     const result = await runWorker(userId, log, { trigger: 'auto' });
+    // İlanlar sekmesindeki LinkedIn / Kariyer.net ilanları: kapananlar özete girmesin diye özetten önce.
+    const listings = await refreshListings({ supabase, checkListing, userId, log }).catch((err) => ({ error: err.message }));
     const summary = await sendDailySummary({ supabase, mailer, config, userId, log, stats: result.status === 'ok' ? result : null }).catch((err) => ({ sent: false, reason: err.message }));
-    return { ...result, summary };
+    return { ...result, summary, listings };
   }
   router.post('/internal/run/:userId', cronOnly, async (req, res) => {
     const userId = z.uuid().parse(req.params.userId);
@@ -438,15 +441,46 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget,
     res.json({ items, autoHours: autoSlots(profile?.scan_hour ?? 9, autoOpts), maxRuns: config.RUNS_PER_DAY });
   });
 
+  const ALERT_COLS = 'id,source,title,company,location,url,score,reason,received_at';
+  async function listAlertJobs(userId) {
+    const q = `user_id=eq.${encodeURIComponent(userId)}&order=received_at.desc,score.desc.nullslast&limit=100`;
+    try {
+      return await supabase.select('alert_jobs', `${q}&select=${ALERT_COLS},status,checked_at,closed_reason`);
+    } catch {
+      return supabase.select('alert_jobs', `${q}&select=${ALERT_COLS}`); // durum sütunları henüz eklenmemişse
+    }
+  }
   router.get('/alerts', async (req, res) => {
     const { profile } = await ensureProfile(req);
-    const items = await supabase.select(
-      'alert_jobs',
-      `user_id=eq.${uid(req)}&select=id,source,title,company,location,url,score,reason,received_at&order=received_at.desc,score.desc.nullslast&limit=100`,
-    );
-    res.json({ address: mailer && config.ALERT_DOMAIN ? `${profile.alert_code}@${config.ALERT_DOMAIN}` : null, items });
+    const [items, targetRows, confirms] = await Promise.all([
+      listAlertJobs(req.user.id),
+      supabase.select('targets', `user_id=eq.${uid(req)}&select=roles,cities`).catch(() => []),
+      supabase.select('inbox_items', `user_id=eq.${uid(req)}&kind=eq.system&title=eq.${encodeURIComponent('Gmail yönlendirme onayı geldi')}&select=data,created_at&order=created_at.desc&limit=1`).catch(() => []),
+    ]);
+    const lastAlertAt = items.reduce((m, j) => (j.received_at > m ? j.received_at : m), '');
+    res.json({
+      address: mailer && config.ALERT_DOMAIN ? `${profile.alert_code}@${config.ALERT_DOMAIN}` : null,
+      items,
+      // Kurulum rehberi için: hangi adımın tamamlandığı ve kullanıcının rolleri (hazır arama bağlantıları).
+      setup: {
+        confirmUrl: confirms[0]?.data?.url || null,
+        confirmAt: confirms[0]?.created_at || null,
+        lastAlertAt: lastAlertAt || null,
+        roles: (targetRows[0]?.roles || []).slice(0, 4),
+        cities: (targetRows[0]?.cities || []).slice(0, 3),
+      },
+    });
   });
-
+  // Panel İlanlar sekmesini açtığında: süresi dolmuş / kapanmış ilanları hemen kontrol eder.
+  const lastCheck = new Map();
+  router.post('/alerts/check', async (req, res) => {
+    const now = Date.now();
+    if (now - (lastCheck.get(req.user.id) || 0) < 60_000) return res.json({ ok: true, skipped: 'throttled', items: await listAlertJobs(req.user.id) });
+    lastCheck.set(req.user.id, now);
+    if (lastCheck.size > 5000) lastCheck.clear();
+    const r = await refreshListings({ supabase, checkListing, userId: req.user.id, limit: 15, log: req.log });
+    res.json({ ok: true, ...r, items: await listAlertJobs(req.user.id) });
+  });
   router.delete('/alerts/:id', async (req, res) => {
     const id = z.uuid().safeParse(req.params.id);
     if (!id.success) throw Errors.badRequest('Geçersiz istek.');

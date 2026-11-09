@@ -46,6 +46,7 @@ export const runNow = () => request('/run', { method: 'POST' });
 export const listAlerts = () => request('/alerts');
 export const removeAlert = (id) => request(`/alerts/${id}`, { method: 'DELETE' });
 export const listRuns = () => request('/runs');
+export const checkAlerts = () => request('/alerts/check', { method: 'POST' });
 
 /** Starts today's scan and streams its steps: onEvent({ type: 'progress' | 'result' | 'error', ... }). */
 export async function runNowStream(onEvent) {
