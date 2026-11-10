@@ -76,3 +76,10 @@ test('verify prompt tells the judge which section a claim comes from', async () 
   assert.match(t.parts[0].text, /"section":"skills"/);
   assert.match(t.system, /MUST be written in Turkish/);
 });
+
+test('droppedSections reports CV sections missing from the output', async () => {
+  const { droppedSections } = await import('../src/pipeline/grounding.js');
+  const cv = 'Ali Veli\nDeneyim\nX\nProjeler\nY\nGönüllülük\nZ';
+  assert.deepEqual(droppedSections(cv, { sections: [{ heading: 'Projeler' }] }), ['Gönüllülük']);
+  assert.deepEqual(droppedSections(cv, { sections: [{ heading: 'Kişisel Projeler' }, { heading: 'Gönüllülük' }] }), []);
+});

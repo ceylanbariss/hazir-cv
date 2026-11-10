@@ -41,12 +41,19 @@ function parseCv(cv) {
   const contacts = extractContacts(cv);
   const experience = [];
   const education = [];
+  const projects = [];
   let section = '';
   for (const line of lines.slice(1)) {
     const h = normalize(line);
     if (/^(deneyim|is deneyimi|experience|work experience)$/.test(h)) { section = 'exp'; continue; }
     if (/^(egitim|education|sertifikalar|certificates)$/.test(h)) { section = 'edu'; continue; }
     if (/^(yetenekler|skills|beceriler|diller|languages|ek bilgiler|additional)$/.test(h)) { section = 'other'; continue; }
+    if (/^(projeler|projects|kisisel projeler)$/.test(h)) { section = 'proj'; continue; }
+    if (section === 'proj') {
+      if (/^[-•*]/.test(line) && projects.length) projects[projects.length - 1].bullets.push(line.replace(/^[-•*]\s*/, ''));
+      else projects.push({ name: line.replace(/\s*[|:].*$/, ''), bullets: [] });
+      continue;
+    }
     if (section === 'exp') {
       if (/\|/.test(line) && DATE_LINE.test(line)) {
         const [role = '', company = '', date = ''] = line.split('|').map((s) => s.trim());
@@ -59,7 +66,7 @@ function parseCv(cv) {
       education.push({ degree, school, date, details: '' });
     }
   }
-  return { name, contacts, experience, education };
+  return { name, contacts, experience, education, projects };
 }
 
 const respond = (obj) => JSON.stringify(obj);
@@ -196,6 +203,8 @@ const handlers = {
       education: p.education,
       skills,
       additional: [],
+      sections: p.projects.length ? [{ heading: 'Projeler', kind: 'detailed', entries: p.projects.map((pr) => ({ role: pr.name, company: '', date: '', bullets_v1: pr.bullets, bullets_v3: pr.bullets, bullet_sources: pr.bullets })), items: [] }] : [],
+      removal_suggestions: [],
     });
   },
 

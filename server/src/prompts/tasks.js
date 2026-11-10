@@ -104,10 +104,12 @@ CONTENT RULES:
 - Write everything in ${langName(lang)}. Translate month names accordingly ("Present"/"Devam Ediyor"). Keep dates exactly as the CV states them; use "" when absent.
 - title: the target role title for "${clean(jobTitle, 120)}", adjusted to the candidate's real level (never claim Senior/Lead if the CV does not support it).
 - summary_v1: 2-4 sentences, first-person voice (in Turkish use natural first-person verb endings, e.g. "geliştirdim"). summary_v3: same content, third-person/neutral voice. Never mention the hiring company's name.
+- NEVER DROP CONTENT: every section, position, project, activity and item in the CV must appear in the output. You may reorder, rephrase and shorten, but not delete. If something looks irrelevant for this job, KEEP it and add it to removal_suggestions with a one-sentence reason in ${langName(lang)} (item = a short label such as the project or position name). The user decides.
 - experience: keep every real position from the CV in reverse-chronological order; 2-5 bullets each, most relevant first. bullets_v3 mirrors bullets_v1 in third-person/neutral voice.
 - education: degrees AND certificates, courses, bootcamps (never put these in skills/additional).
 - skills: max 12 items, each max 3 words, only skills evidenced in the CV, prefer the posting's spelling, most relevant first.
-- additional: spoken languages with levels, volunteering, awards, etc. that exist in the CV.
+- additional: spoken languages with levels and other one-line facts that do not belong to a section below.
+- sections: every other section of the CV, in the CV's order, with its heading in ${langName(lang)} (e.g. "Projeler", "Topluluk ve Liderlik", "Gönüllülük", "Yayınlar", "Ödüller"). Projects ALWAYS go here under a "Projeler"/"Projects" section — never fold them into experience, summary or additional. kind "detailed" for entries with a name and descriptions (role = project/activity name, company = organisation or tech stack as written in the CV, date as in the CV or "", bullets_v1/bullets_v3/bullet_sources exactly like experience; items = []), kind "simple" for plain lists (items, entries = []). Put the projects most relevant to the posting first. Use [] when the CV has no such section.
 - Contact fields: copy from the CV exactly; "" when absent. linkedin without "https://".
 - Plain text only: no markdown, no ** or bullet characters.
 ${GUARD}`,
@@ -135,6 +137,7 @@ verdict:
 note: one short sentence. The note MUST be written in ${langName(lang)}. For non-supported verdicts say exactly what is not backed by the CV; for supported claims use "".
 
 How to read claims by section:
+- section "extra": a bullet from a projects / activities / volunteering section; judge it exactly like an experience bullet.
 - section "skills": the claim is only "the candidate has or has used this skill". It is SUPPORTED if the skill, an obvious equivalent, or a clearly broader category of something the CV shows appears ANYWHERE in the CV (experience, projects, summary, education, skills list). Example: a CV mentioning Odoo modules supports "Odoo ERP"; a CV describing AI-assisted development tools supports "Yapay Zeka". It does NOT matter whether the original CV had it in a skills list.
 - section "experience": check the action, scope, tools, numbers and outcome against the original CV.
 - section "summary": check each factual statement (years, roles, domains, achievements).

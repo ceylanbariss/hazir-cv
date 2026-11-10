@@ -146,6 +146,39 @@ export function AtsCheck({ data, lang }) {
 }
 
 // ---------------------------------------------------------------------------
+// CV'den çıkarılması önerilenler (çıkarılmaz, yalnızca önerilir) ve kaybolan bölüm uyarısı
+// ---------------------------------------------------------------------------
+export function KeptContentNotes({ analysis, lang }) {
+  const dropped = analysis?.dropped_sections || [];
+  const sugg = analysis?.removal_suggestions || [];
+  if (!dropped.length && !sugg.length) return null;
+  return (
+    <div className="space-y-3 mb-6">
+      {dropped.length > 0 && (
+        <p className="text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex gap-1.5">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+          {T(lang, `Orijinal CV'ndeki ${dropped.map((d) => `"${d}"`).join(', ')} bölümü yeni CV'de yer almıyor. Analizi yeniden çalıştırabilir ya da "Yeni madde ekle" ile ekleyebilirsin.`, `Your original CV's ${dropped.join(', ')} section is missing. Re-run the analysis or add it with "Add item".`)}
+        </p>
+      )}
+      {sugg.length > 0 && (
+        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+          <h4 className="flex items-center gap-1.5 text-sm font-bold text-slate-800"><Sparkles className="w-4 h-4" /> {T(lang, 'Çıkarmayı düşünebileceklerin', 'You might remove')}</h4>
+          <p className="text-[11px] text-slate-500 mt-0.5 mb-3">{T(lang, 'CV\'ndeki hiçbir şeyi silmedik. Aşağıdakiler bu ilan için zayıf kalıyor; istersen önizlemede üzerine gelip çöp kutusuyla kaldırabilirsin.', 'Nothing was removed. These look weak for this job; hover them in the preview and use the bin icon if you want to remove them.')}</p>
+          <ul className="space-y-2">
+            {sugg.map((r, i) => (
+              <li key={i} className="text-xs">
+                <span className="font-semibold text-slate-800">{r.item}</span>
+                {r.reason && <span className="block text-slate-500">{r.reason}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // İlana özel ön yazı
 // ---------------------------------------------------------------------------
 export function CoverLetterPanel({ cv, jobPosting, lang, name }) {

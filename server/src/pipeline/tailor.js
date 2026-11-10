@@ -21,6 +21,7 @@ import {
   groundContacts,
   addedKeywords,
   tailoredText,
+  droppedSections,
 } from './grounding.js';
 
 const MIN_CV_CHARS = 150;
@@ -46,6 +47,18 @@ function normaliseTailored(t) {
     }),
     skills,
     additional: t.additional.map(stripMd).filter(Boolean),
+    sections: (t.sections || [])
+      .map((sec) => ({
+        heading: stripMd(sec.heading),
+        kind: sec.kind,
+        entries: (sec.entries || []).map((e) => {
+          const v1 = e.bullets_v1.map(stripMd).filter(Boolean);
+          return { ...e, role: stripMd(e.role), company: stripMd(e.company), date: stripMd(e.date), bullets_v1: v1, bullets_v3: v1.map((b, i) => stripMd(e.bullets_v3[i]) || b), bullet_sources: v1.map((_, i) => e.bullet_sources[i] || '') };
+        }),
+        items: (sec.items || []).map(stripMd).filter(Boolean),
+      }))
+      .filter((sec) => sec.heading && (sec.entries.length || sec.items.length)),
+    removal_suggestions: (t.removal_suggestions || []).map((r) => ({ item: stripMd(r.item), reason: stripMd(r.reason) })).filter((r) => r.item),
   };
 }
 
@@ -139,6 +152,9 @@ export async function runTailorPipeline(ctx, { cv, jobPosting, lang }, onStage =
   const sum = (k) => trace.reduce((s, x) => s + (x[k] || 0), 0);
   // Too few concrete requirements make any percentage misleading; tell the UI.
   if (enriched.length < 4) analysis.low_confidence = 'few_requirements';
+  const dropped = droppedSections(cv, tailored);
+  if (dropped.length) analysis.dropped_sections = dropped;
+  analysis.removal_suggestions = tailored.removal_suggestions || [];
 
   const inputFlags = [
     ...(looksLikeInjection(cv) ? ['possible_prompt_injection_in_cv'] : []),
