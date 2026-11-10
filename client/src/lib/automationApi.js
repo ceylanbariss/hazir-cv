@@ -33,6 +33,7 @@ export const uploadCv = (body) => request('/cvs', { method: 'POST', body });
 export const updateCv = (id, patch) => request(`/cvs/${id}`, { method: 'PATCH', body: patch });
 export const deleteCv = (id) => request(`/cvs/${id}`, { method: 'DELETE' });
 export const suggestRoles = (roles) => request('/roles/suggest', { method: 'POST', body: { roles } });
+export const expandRoles = (roles) => request('/roles/expand', { method: 'POST', body: { roles } });
 export const saveTargets = (targets) => request('/targets', { method: 'PUT', body: targets });
 
 // Faz 2: Gmail bağlantısı, başvurular, elle tarama

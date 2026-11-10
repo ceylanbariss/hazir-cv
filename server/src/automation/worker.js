@@ -4,6 +4,7 @@
 import { runTask } from '../llm/runTask.js';
 import * as P from './prompts.js';
 import { dailyQueries } from './search.js';
+import { variantsFor, searchTitles } from './roles.js';
 import { shouldSkip, hasHiringSignal, domainMatches, rootName, hostOf } from './pages.js';
 
 const MIN_SCORE = { job: 70, open_application: 65 };
@@ -182,11 +183,21 @@ export async function runForUser({ supabase, llm, budget, search, readPage, log,
   emit('start', `Profilini ve hedeflerini okudum: ${targets.roles.slice(0, 3).join(', ')}${targets.roles.length > 3 ? '…' : ''}`, 3);
 
   try {
-    // 1) Arama
-    const queries = dailyQueries(
-      { roles: targets.roles, cities: targets.cities, workModes: targets.work_modes, openApplications: profile.open_applications },
-      { count: config.SEARCHES_PER_USER, day: now, offset: ranToday },
-    );
+    // 0) Benzer başlıklar: "İş Analisti" → "Sistem Analisti", "Business Analyst", … (bir kez üretilip saklanır)
+    const variants = await variantsFor(ctx, targets.roles, targets.role_variants);
+    if (targets.roles.some((r) => !Array.isArray(targets.role_variants?.[r]))) {
+      await supabase.update('targets', `user_id=eq.${uid}`, { role_variants: variants }).catch(() => {}); // sütun yoksa atla
+    }
+    const similar = searchTitles(targets.roles, variants).slice(targets.roles.length);
+
+    // 1) Arama: aramaların yarısı seçilen rollerle, yarısı benzer başlıklarla
+    const where = { cities: targets.cities, workModes: targets.work_modes, openApplications: profile.open_applications };
+    const total = config.SEARCHES_PER_USER;
+    const mainCount = similar.length ? Math.ceil(total / 2) : total;
+    const queries = [
+      ...dailyQueries({ roles: targets.roles, ...where }, { count: mainCount, day: now, offset: ranToday }),
+      ...(similar.length ? dailyQueries({ roles: similar, ...where }, { count: total - mainCount, day: now, offset: ranToday }) : []),
+    ];
     const seenUrls = new Set();
     const hits = [];
     for (const [qi, q] of queries.entries()) {
@@ -229,7 +240,7 @@ export async function runForUser({ supabase, llm, budget, search, readPage, log,
 
     // 4) Değerlendirme
     const promptProfile = { ...cvProfile };
-    const promptTargets = { roles: targets.roles, excluded: targets.excluded, cities: targets.cities, work_modes: targets.work_modes, seniority: targets.seniority, long_term_internship: targets.long_term_internship };
+    const promptTargets = { roles: targets.roles, similar_titles: similar, excluded: targets.excluded, cities: targets.cities, work_modes: targets.work_modes, seniority: targets.seniority, long_term_internship: targets.long_term_internship };
     const cvIds = new Set(cvs.map((c) => c.id));
     for (const [pi, page] of pages.entries()) {
       if (todayCount >= profile.daily_limit) {

@@ -95,6 +95,11 @@ const handlers = {
     });
   },
 
+  expand_roles(text) {
+    const roles = between(text, 'roles').split('\n').map((r) => r.trim()).filter(Boolean);
+    return respond({ items: roles.map((role) => ({ role, variants: [`${role} Uzmanı`, `Kıdemli ${role}`, role, `${role} (EN)`] })) });
+  },
+
   score_alert_jobs(text) {
     const lines = between(text, 'jobs').split('\n').filter((l) => /^\d+:/.test(l));
     return respond({

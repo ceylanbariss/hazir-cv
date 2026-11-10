@@ -30,6 +30,29 @@ export const RoleSuggestions = z.object({
   suggestions: z.array(z.object({ title: z.string().min(2).max(60), reason: z.string().max(140) })).max(10),
 });
 
+export const RoleVariants = z.object({
+  items: z.array(z.object({ role: z.string().max(80), variants: z.array(z.string().min(2).max(80)).max(14) })).max(15),
+});
+
+/** Seçilen her rol için ilanlarda aynı ya da çok yakın iş için kullanılan diğer başlıklar. */
+export function expandRoles({ roles }) {
+  return {
+    name: 'expand_roles',
+    schema: RoleVariants,
+    temperature: 0.2,
+    thinkingBudget: 0,
+    maxOutputTokens: 1200,
+    system: `You help a job seeker in Turkey search for jobs. For EACH given role, list the other job titles that Turkish employers use in ads for the same or closely overlapping work, so a search for the role also finds these ads.
+Rules:
+- 6 to 10 variants per role. Mix the Turkish titles used in Turkish ads and the English titles that appear in Turkish ads (e.g. for "İş Analisti": "İş Süreçleri Analisti", "Business Process Analyst", "Sistem Analisti", "Systems Analyst", "Gereksinim Analisti", "Requirements Analyst", "Fonksiyonel Analist", "Business Analyst", "İş Çözümleri Analisti", "Proje Analisti"). For "CRM": "CRM Analisti", "CRM Uzmanı", "CRM Specialist", "CRM Danışmanı", "CRM İş Analisti", "CRM Veri Analisti", "Müşteri Deneyimi Analisti", "CRM Proje Yöneticisi".
+- Each variant is ONE plain title, without seniority words (junior, senior, kıdemli, stajyer) and without explanations or parentheses.
+- Only titles a person targeting this role would genuinely apply to. No unrelated professions.
+- Never repeat the role itself; return the role exactly as given in "role".
+${GUARD}`,
+    parts: [{ text: env('roles', roles.join('\n'), 1_500) }],
+  };
+}
+
 export function extractProfile({ cv }) {
   return {
     name: 'extract_profile',
@@ -106,12 +129,12 @@ export function evaluatePage({ profile, targets, cvs, page, fullName, portfolioU
 kind:
 - "job": the page advertises a specific OPEN POSITION and applications are accepted by e-mail.
 - "open_application": the page belongs to a company's own website (careers / HR / contact page) and shows the company hires for itself ("ekibimize katılın", "açık pozisyonlar", "özgeçmişinizi ... adresine gönderin"). An unsolicited application can be sent to its HR address. Exception: companies whose product is careers, CV writing, job matching, recruitment or HR consulting → irrelevant.
-- "irrelevant": job boards and listing pages, news, blogs, forums, personal sites, courses, expired ads, roles outside the candidate's target roles, roles requiring clearly unmet experience, jobs that require living outside Turkey (unless remote), university / school / public institution pages, compulsory school internships, ads posted by intermediaries.
+- "irrelevant": job boards and listing pages, news, blogs, forums, personal sites, courses, expired ads, roles outside the candidate's target roles (targets.roles and targets.similar_titles), roles requiring clearly unmet experience, jobs that require living outside Turkey (unless remote), university / school / public institution pages, compulsory school internships, ads posted by intermediaries.
 
 Rules:
 1. Never invent experience, skills, numbers or achievements that are not in the profile. Do not inflate internship work.
 2. email: choose ONLY from "Addresses found on the page". It must belong to the hiring company (its domain, or explicitly given in the ad as the application address). Prefer HR addresses (ik@, hr@, kariyer@, cv@). Never pick sales, accounting or support addresses. If none fits, "" and kind "irrelevant".
-3. score 0-100: for a job, fit of role + skills + seniority with the profile and targets; for an open application, how well the company fits the candidate's field. If a stated requirement is clearly unmet (e.g. 5+ years for a junior), do not exceed 45. Roles matching an excluded keyword get at most 20.
+3. score 0-100 (titles listed in targets.similar_titles count as target roles): for a job, fit of role + skills + seniority with the profile and targets; for an open application, how well the company fits the candidate's field. If a stated requirement is clearly unmet (e.g. 5+ years for a junior), do not exceed 45. Roles matching an excluded keyword get at most 20.
 4. subject: job → "<Position> Başvurusu – <full name>"; open application → "Açık Başvuru – <best matching target role> – <full name>".
 5. cover_letter: 120-180 words, starts with "Merhaba,", three short paragraphs, ends with "Saygılarımla," and the full name on the next line. For a job, match two concrete requirements of the ad with two concrete items from the profile. For an open application, mention the company's field as written on the page (never invent), say which target roles the candidate can contribute to with two concrete items from the profile, and ask to be considered when a suitable position opens. Mention that the CV is attached.${portfolioUrl ? ' Mention the portfolio link once: ' + portfolioUrl : ''}
    Avoid clichés: "öğrenme tutkusu", "katma değer", "dinamik", "vizyoner", "tutkulu", "inanıyorum", "yakından takip", "ilgiyle takip ediyorum". If you mention the company's work, write that the candidate "büyük bir ilgiyle inceledi" it (e.g. "… çalışmalarınızı büyük bir ilgiyle inceledim").
@@ -161,7 +184,7 @@ export function scoreAlertJobs({ profile, targets, jobs }) {
 For every line that is a real job posting return one item:
 - i: the line index.
 - company, location: copy them from the line if they are visible (location is usually a city, "Uzaktan"/"Remote" or "Hibrit"), otherwise "".
-- score 0-100: fit of the job title and visible details with the candidate's target roles, skills and seniority. A role matching an excluded keyword gets at most 20. A clearly more senior role than the candidate (e.g. Senior / Lead for a junior) gets at most 40.
+- score 0-100: fit of the job title and visible details with the candidate's target roles (targets.similar_titles count as target roles too), skills and seniority. A role matching an excluded keyword gets at most 20. A clearly more senior role than the candidate (e.g. Senior / Lead for a junior) gets at most 40.
 - reason: one short Turkish sentence explaining the score.
 Skip lines that are not job postings. Never invent companies or details.
 ${ALERT_GUARD}`,
