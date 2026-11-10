@@ -143,7 +143,12 @@ export async function handleInboundEmail({ supabase, mailer, llm, budget, log, c
 
   const scored = fresh.map((j) => ({ ...j, company: null, location: null, score: null, reason: null }));
   try {
-    const [targets] = await supabase.select('targets', `user_id=eq.${enc(userId)}&select=roles,excluded,cities,work_modes,seniority`);
+    const tq = `user_id=eq.${enc(userId)}&select=roles,excluded,cities,work_modes,seniority`;
+    const [targets] = await supabase.select('targets', `${tq},role_variants`).catch(() => supabase.select('targets', tq));
+    if (targets?.role_variants) {
+      targets.similar_titles = Object.values(targets.role_variants).flat().slice(0, 30); // benzer başlıklar da hedef sayılır
+      delete targets.role_variants;
+    }
     const cvs = await supabase.select('cvs', `user_id=eq.${enc(userId)}&select=is_default,extracted_profile&order=created_at.asc`);
     const main = cvs.find((c) => c.is_default) || cvs[0];
     if (targets && main?.extracted_profile && llm) {

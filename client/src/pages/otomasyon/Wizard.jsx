@@ -1,6 +1,6 @@
 // Kurulum sihirbazı (Faz 1): CV'ler → aradığın işler → konum → başvuru tercihleri.
 import React, { useEffect, useRef, useState } from 'react';
-import { getSetup, uploadCv, updateCv, deleteCv, suggestRoles, saveTargets, updateMe } from '../../lib/automationApi.js';
+import { getSetup, uploadCv, updateCv, deleteCv, suggestRoles, expandRoles, saveTargets, updateMe } from '../../lib/automationApi.js';
 import { readPdf } from '../../lib/pdfText.js';
 import { Spinner } from '../../hz/ui.jsx';
 
@@ -172,6 +172,57 @@ function StepCvs({ cvs, setCvs }) {
   );
 }
 
+// Seçilen her rolün altında: bu rolle birlikte aranacak benzer başlıklar (kullanıcı istemediğini çıkarır).
+function RoleVariants({ t, set }) {
+  const [loading, setLoading] = useState([]);
+  const [err, setErr] = useState(null);
+  const variants = t.role_variants || {};
+  const missing = t.roles.filter((r) => !Array.isArray(variants[r]));
+  const missingKey = missing.join('|');
+  useEffect(() => {
+    if (!missing.length) return undefined;
+    const timer = setTimeout(async () => {
+      setLoading(missing); setErr(null);
+      try {
+        const res = await expandRoles(missing);
+        set((cur) => ({ role_variants: { ...(cur.role_variants || {}), ...res.variants } }));
+      } catch (e) {
+        setErr(e.message);
+      } finally {
+        setLoading([]);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [missingKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!t.roles.length) return null;
+  const drop = (role, v) => set((cur) => ({ role_variants: { ...(cur.role_variants || {}), [role]: (cur.role_variants?.[role] || []).filter((x) => x !== v) } }));
+  return (
+    <div className="hz-variants">
+      <div>
+        <span className="hz-label">Bunlar da aranacak</span>
+        <p className="hz-hint">Her rol için ilanlarda kullanılan benzer başlıkları da arıyoruz. İstemediğini × ile çıkar.</p>
+      </div>
+      {t.roles.map((r) => (
+        <div key={r} className="hz-variant-row">
+          <strong>{r}</strong>
+          {loading.includes(r) || (!Array.isArray(variants[r]) && !err) ? (
+            <span className="hz-hint hz-ui" style={{ display: 'inline-flex', gap: 8, alignItems: 'center' }}><span className="hz-spin" style={{ width: 14, height: 14 }} />Benzer başlıklar hazırlanıyor</span>
+          ) : variants[r]?.length ? (
+            <div className="hz-chips">
+              {variants[r].map((v) => (
+                <span className="hz-chip hz-chip-soft" key={v}>{v}<button type="button" aria-label={`${v} aramadan çıkar`} onClick={() => drop(r, v)}>×</button></span>
+              ))}
+            </div>
+          ) : (
+            <span className="hz-hint">Yalnızca bu başlıkla aranacak.</span>
+          )}
+        </div>
+      ))}
+      {err && <p className="hz-notice" role="alert">{err}</p>}
+    </div>
+  );
+}
+
 // ---- 2. Aradığın işler ------------------------------------------------------
 function StepRoles({ t, set }) {
   const [busy, setBusy] = useState(false);
@@ -189,6 +240,7 @@ function StepRoles({ t, set }) {
         <p className="hz-lead" style={{ fontSize: 18 }}>İlanlarda göreceğin unvanlarla yaz. Asistan bu rollerle arama yapar ve ilanları CV'ne göre puanlar.</p>
       </div>
       <ChipInput id="roles" label="Roller" values={t.roles} onChange={(roles) => set({ roles })} placeholder="Örneğin İş Analisti" />
+      <RoleVariants t={t} set={set} />
       <div className="hz-field">
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
           <button type="button" className="hz-btn" onClick={fetchSuggestions} disabled={busy}>
@@ -333,7 +385,7 @@ export default function Wizard({ profile, onExit, onDone }) {
   async function next() {
     setErr(null); setSaving(true);
     try {
-      if (step === 2) await saveTargets({ roles: t.roles, excluded: t.excluded, cities: t.cities, work_modes: t.work_modes, seniority: t.seniority, long_term_internship: t.long_term_internship });
+      if (step === 2) await saveTargets({ roles: t.roles, excluded: t.excluded, cities: t.cities, work_modes: t.work_modes, seniority: t.seniority, long_term_internship: t.long_term_internship, role_variants: Object.fromEntries(Object.entries(t.role_variants || {}).filter(([r, v]) => t.roles.includes(r) && Array.isArray(v))) });
       if (step === 3) {
         const { profile: updated } = await updateMe({ ...p, setup_step: 6 });
         return onDone(updated);
@@ -352,7 +404,7 @@ export default function Wizard({ profile, onExit, onDone }) {
       <Progress step={step} />
       <section className="hz-sheet hz-pad" aria-live="polite">
         {step === 0 && <StepCvs cvs={cvs} setCvs={setCvs} />}
-        {step === 1 && <StepRoles t={t} set={(x) => setT({ ...t, ...x })} />}
+        {step === 1 && <StepRoles t={t} set={(x) => setT((cur) => ({ ...cur, ...(typeof x === 'function' ? x(cur) : x) }))} />}
         {step === 2 && <StepLocation t={t} set={(x) => setT({ ...t, ...x })} />}
         {step === 3 && <StepPrefs p={p} set={(x) => setP({ ...p, ...x })} />}
         {err && <p className="hz-notice" role="alert" style={{ marginTop: 20 }}>{err}</p>}

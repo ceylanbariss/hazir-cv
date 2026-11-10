@@ -11,6 +11,7 @@ import { createSealer } from '../src/automation/crypto.js';
 import { buildMime, encodeHeader } from '../src/automation/gmail.js';
 import { dailyQueries } from '../src/automation/search.js';
 import { validEmails, isPublicUrl, emailsIn, rootName, shouldSkip, createPageReader } from '../src/automation/pages.js';
+import { variantsFor, cleanVariants, searchTitles } from '../src/automation/roles.js';
 import { checkVerdict, fixLetter, fixPhrases, listDueUsers, dayStart, trHour, autoSlots } from '../src/automation/worker.js';
 
 const UID = '22222222-2222-4222-8222-222222222222';
@@ -75,11 +76,14 @@ const PAGES = {
 
 function fakeSearch() {
   let calls = 0;
+  const queries = [];
   return {
     enabled: true,
+    queries,
     get calls() { return calls; },
-    async search() {
+    async search(q) {
       calls++;
+      queries.push(q);
       return { provider: 'fake', cached: false, results: Object.keys(PAGES).concat('https://www.kariyer.net/ilan/1').map((url) => ({ url, title: '', snippet: '' })) };
     },
   };
@@ -196,6 +200,11 @@ test('worker drafts approval-pending applications and runs at most three times a
   assert.equal(app.status, 'pending_approval');
   assert.equal(app.recipient, 'ik@atlas.com.tr');
   assert.equal(app.company_key, 'atlas');
+  // Benzer başlıklar bir kez üretilip hedeflere kaydedildi ve aramaların bir kısmı onlarla yapıldı.
+  const tg = sb.db.targets.find((t) => t.user_id === UID);
+  assert.deepEqual(tg.role_variants['İş Analisti'], ['İş Analisti Uzmanı']);
+  assert.ok(srch.queries.some((q) => q.includes('İş Analisti Uzmanı')));
+  assert.ok(srch.queries.some((q) => q.includes('"İş Analisti"') || q.includes('İş Analisti ')));
   assert.equal(app.work_mode, 'hybrid'); // sayfadan okunan çalışma şekli ve şehir
   assert.equal(app.city, 'İstanbul');
   assert.match(app.cover_letter, /Saygılarımla,\nBarış Deneme$/);
@@ -362,4 +371,19 @@ test('cover letter phrasing: "takip ediyorum" becomes "büyük bir ilgiyle incel
   assert.equal(fixPhrases('Ürünlerinizi takip etmekteyim.'), 'Ürünlerinizi büyük bir ilgiyle inceledim.');
   assert.equal(fixPhrases('Hiç değişmeyen cümle.'), 'Hiç değişmeyen cümle.');
   assert.match(fixLetter('Merhaba, Çalışmalarınızı yakından takip ediyorum. CV ektedir.', 'Barış Ceylan'), /büyük bir ilgiyle inceledim/);
+});
+
+test('similar titles: cleaned, stored ones reused, AI asked once for the rest', async () => {
+  assert.deepEqual(cleanVariants('İş Analisti', ['Kıdemli İş Analisti', 'Business Analyst (BA)', 'Sistem Analisti', 'sistem analisti', 'Junior Data Analyst']), ['Business Analyst', 'Sistem Analisti', 'Data Analyst']);
+  assert.deepEqual(searchTitles(['İş Analisti', 'CRM'], { 'İş Analisti': ['Sistem Analisti', 'Business Analyst'], CRM: ['CRM Uzmanı'] }), ['İş Analisti', 'CRM', 'Sistem Analisti', 'CRM Uzmanı', 'Business Analyst']);
+  let calls = 0;
+  const llm = createMockProvider();
+  const counting = { ...llm, generate: (...a) => { calls++; return llm.generate(...a); } };
+  const ctx = { llm: counting, trace: [] };
+  const v = await variantsFor(ctx, ['Veri Analisti', 'Ürün Sahibi'], { 'Ürün Sahibi': ['Product Owner'] });
+  assert.deepEqual(v['Ürün Sahibi'], ['Product Owner']); // kayıtlı olan kullanıldı
+  assert.deepEqual(v['Veri Analisti'], ['Veri Analisti Uzmanı']);
+  assert.equal(calls, 1);
+  await variantsFor(ctx, ['Veri Analisti'], {});
+  assert.equal(calls, 1); // önbellekten
 });

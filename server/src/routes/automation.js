@@ -15,6 +15,7 @@ import { handleInboundEmail } from '../automation/alerts.js';
 import { sendDailySummary } from '../automation/summary.js';
 import { verifySvix } from '../automation/mailer.js';
 import { refreshListings } from '../automation/liveness.js';
+import { variantsFor } from '../automation/roles.js';
 
 const uid = (req) => encodeURIComponent(req.user.id);
 const MAX_CVS = 3;
@@ -55,6 +56,8 @@ const Targets = z
     work_modes: z.array(z.enum(['remote', 'hybrid', 'onsite'])).min(1, 'En az bir çalışma şekli seç.').max(3),
     seniority: z.array(z.enum(P.SENIORITY)).min(1, 'En az bir kıdem seç.').max(4),
     long_term_internship: z.boolean(),
+    // { "İş Analisti": ["Sistem Analisti", "Business Analyst", …] } — kullanıcı istemediklerini çıkarabilir
+    role_variants: z.record(z.string().max(60), z.array(text(70)).max(12)).optional(),
   })
   .strict();
 
@@ -310,13 +313,25 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget,
   });
 
   router.put('/targets', json, async (req, res) => {
-    const data = parse(Targets, req.body);
+    const { role_variants, ...data } = parse(Targets, req.body);
     await ensureProfile(req);
-    const [targets] = await supabase.insert('targets', [{ user_id: req.user.id, ...data, updated_at: new Date().toISOString() }], {
-      upsert: true,
-      onConflict: 'user_id',
-    });
+    const row = { user_id: req.user.id, ...data, updated_at: new Date().toISOString() };
+    // Yalnızca hâlâ seçili rollerin benzer başlıkları saklanır.
+    const kept = role_variants ? Object.fromEntries(Object.entries(role_variants).filter(([r]) => data.roles.includes(r))) : null;
+    const opts = { upsert: true, onConflict: 'user_id' };
+    let targets;
+    try {
+      [targets] = await supabase.insert('targets', [kept ? { ...row, role_variants: kept } : row], opts);
+    } catch (err) {
+      if (!kept) throw err;
+      [targets] = await supabase.insert('targets', [row], opts); // role_variants sütunu henüz yoksa
+    }
     res.json({ targets });
+  });
+  // Seçilen roller için benzer başlıklar (kurulumda rollerin altında gösterilir).
+  router.post('/roles/expand', heavy, json, async (req, res) => {
+    const { roles } = parse(z.object({ roles: z.array(text(60)).min(1).max(15) }), req.body);
+    res.json({ variants: await variantsFor(ctxFor(req), roles) });
   });
 
   // ---- Gmail bağlantısı -------------------------------------------------------

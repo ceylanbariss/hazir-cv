@@ -524,3 +524,9 @@
 .hz-btn-danger { border-color: var(--hata); color: var(--hata); }
 .hz-btn-danger:hover { box-shadow: 3px 3px 0 var(--hata); }
 .hz-danger-confirm { display: grid; gap: 8px; max-width: 360px; }
+
+/* ---- Kurulum: benzer başlıklar ---------------------------------------------- */
+.hz-variants { display: grid; gap: 14px; padding: 16px 18px; border: 1px solid var(--cizgi); border-radius: var(--r-card); background: linear-gradient(180deg, #fff, var(--kagit)); }
+.hz-variant-row { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--cizgi-acik); }
+.hz-variant-row strong { font-family: var(--f-ui); font-size: 15px; }
+.hz-chip-soft { background: #fff; border-color: var(--cizgi); font-size: 13px; }
