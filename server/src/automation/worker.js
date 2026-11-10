@@ -32,6 +32,17 @@ export function fixLetter(text, fullName) {
   return fullName ? `${body}\n\nSaygılarımla,\n${fullName}` : `${body}\n\nSaygılarımla,`;
 }
 
+/** Çalışma şekli / şehir sütunları henüz yoksa (eski veritabanı) onlarsız kaydeder. */
+async function insertApplication(supabase, row) {
+  try {
+    return await supabase.insert('applications', [row]);
+  } catch (err) {
+    const { work_mode: _w, city: _c, ...rest } = row;
+    if (!('work_mode' in row)) throw err;
+    return supabase.insert('applications', [rest]);
+  }
+}
+
 /** Applies the server-side safety rules to the model's verdict. Returns { kind, warnings }. */
 export function checkVerdict(v, page, excluded = []) {
   const warnings = [];
@@ -244,8 +255,10 @@ export async function runForUser({ supabase, llm, budget, search, readPage, log,
         continue;
       }
       blocked.add(companyKey);
-      await supabase.insert('applications', [
-        {
+      const WORK_MODES = new Set(['remote', 'hybrid', 'onsite']);
+      const where = { work_mode: WORK_MODES.has(v.work_mode) ? v.work_mode : null, city: String(v.city || '').trim().slice(0, 60) || null };
+      await insertApplication(supabase, {
+          ...where,
           user_id: userId,
           company: (v.company || hostOf(page.url)).slice(0, 120),
           company_key: companyKey,
@@ -260,8 +273,7 @@ export async function runForUser({ supabase, llm, budget, search, readPage, log,
           subject: (v.subject || `Başvuru – ${fullName}`).replace(/\s+/g, ' ').slice(0, 150),
           cv_id: cvIds.has(v.cv_id) ? v.cv_id : main.id,
           status: 'pending_approval',
-        },
-      ]);
+      });
       stats.drafted++;
       todayCount++;
       emit('draft', `Uygun buldum — ${label} (${v.score} puan). Ön yazıyı hazırladım, onayına sundum.`, pct + 3);

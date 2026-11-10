@@ -510,3 +510,12 @@
   .hz-nav-label::after { font-size: 10px; }
   .hz-alert-address code { font-size: 13px; }
 }
+
+/* ---- Çalışma şekli ve şehir etiketleri ----------------------------------------- */
+.hz-tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.hz-tag { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 3px 11px 3px 9px; border-radius: 999px; border: 1px solid var(--cizgi); background: #fff; font-family: var(--f-ui); font-size: 13px; font-weight: 700; color: var(--murekkep); white-space: nowrap; }
+.hz-tag svg { flex: none; }
+.hz-tag[data-mode='remote'] { background: var(--posta-acik); border-color: #a7f3d0; color: var(--onay); }
+.hz-tag[data-mode='hybrid'] { background: #eff6ff; border-color: #bfdbfe; color: #1d4ed8; }
+.hz-tag[data-mode='onsite'] { background: #fff7ed; border-color: #fed7aa; color: #c2410c; }
+.hz-tag[data-mode='unknown'], .hz-tag[data-empty] { background: var(--kagit); color: var(--soluk); font-weight: 400; border-style: dashed; }

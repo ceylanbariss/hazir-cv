@@ -65,7 +65,7 @@ function fakeSupabase() {
 const PAGES = {
   'https://atlas.com.tr/kariyer/is-analisti': {
     title: 'İş Analisti ilanı – Atlas', snippet: 'Özgeçmişinizi ik@atlas.com.tr adresine gönderin',
-    text: 'Atlas Yazılım İş Analisti pozisyonu ilanı. SQL ve süreç analizi. Özgeçmişinizi ik@atlas.com.tr adresine gönderin.', emails: ['ik@atlas.com.tr'],
+    text: 'Atlas Yazılım İş Analisti pozisyonu ilanı. İstanbul ofisimizde hibrit çalışma. SQL ve süreç analizi. Özgeçmişinizi ik@atlas.com.tr adresine gönderin.', emails: ['ik@atlas.com.tr'],
   },
   'https://kuzey.com/hakkimizda': {
     title: 'Kuzey Kimya', snippet: 'kimya', text: 'Kimya üretimi. info@kuzey.com', emails: ['info@kuzey.com'],
@@ -196,6 +196,8 @@ test('worker drafts approval-pending applications and runs at most three times a
   assert.equal(app.status, 'pending_approval');
   assert.equal(app.recipient, 'ik@atlas.com.tr');
   assert.equal(app.company_key, 'atlas');
+  assert.equal(app.work_mode, 'hybrid'); // sayfadan okunan çalışma şekli ve şehir
+  assert.equal(app.city, 'İstanbul');
   assert.match(app.cover_letter, /Saygılarımla,\nBarış Deneme$/);
   assert.equal(sb.db.discoveries.length, 2);
   assert.equal(sb.db.inbox_items.at(-1).kind, 'needs_approval');

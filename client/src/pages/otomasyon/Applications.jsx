@@ -29,6 +29,44 @@ function SourceLink({ url }) {
   );
 }
 
+// ---- Çalışma şekli ve şehir ----------------------------------------------------
+const MODE = { remote: 'Uzaktan', hybrid: 'Hibrit', onsite: 'Ofiste' };
+/** "İstanbul (Hibrit)", "Greater Istanbul (Hybrid)", "Uzaktan" → { mode, city } */
+export function parseLocation(text) {
+  const t = String(text || '').trim();
+  const low = t.toLocaleLowerCase('tr');
+  const mode = /uzaktan|remote|evden/.test(low) ? 'remote' : /hibrit|hybrid/.test(low) ? 'hybrid' : /ofis|on-site|onsite|iş yerinde|yerinde/.test(low) ? 'onsite' : null;
+  const city = t.replace(/\([^)]*\)/g, '').replace(/\b(greater|metropolitan area)\b/gi, '').replace(/uzaktan|remote|hibrit|hybrid/gi, '').replace(/,?\s*(türkiye|turkey)\s*$/i, '').replace(/[·,\s]+$/g, '').trim();
+  return { mode, city: cityName(city) };
+}
+const CITY_FIX = { istanbul: 'İstanbul', izmir: 'İzmir', eskisehir: 'Eskişehir', ankara: 'Ankara', bursa: 'Bursa', antalya: 'Antalya', kocaeli: 'Kocaeli' };
+// LinkedIn çoğu zaman yalnızca ilçeyi yazar: ilçe → "İstanbul · Sarıyer".
+const IST_DISTRICTS = ['adalar', 'arnavutköy', 'ataşehir', 'avcılar', 'bağcılar', 'bahçelievler', 'bakırköy', 'başakşehir', 'bayrampaşa', 'beşiktaş', 'beykoz', 'beylikdüzü', 'beyoğlu', 'büyükçekmece', 'çatalca', 'çekmeköy', 'esenler', 'esenyurt', 'eyüpsultan', 'fatih', 'gaziosmanpaşa', 'güngören', 'kadıköy', 'kağıthane', 'kartal', 'küçükçekmece', 'maltepe', 'pendik', 'sancaktepe', 'sarıyer', 'silivri', 'sultanbeyli', 'sultangazi', 'şile', 'şişli', 'tuzla', 'ümraniye', 'üsküdar', 'zeytinburnu'];
+function cityName(raw) {
+  const c = String(raw || '').split(',')[0].trim();
+  if (!c) return null;
+  const low = c.toLocaleLowerCase('tr');
+  const ascii = low.replace(/ı/g, 'i').replace(/ş/g, 's').replace(/ğ/g, 'g').replace(/ü/g, 'u').replace(/ö/g, 'o').replace(/ç/g, 'c').replace(/i̇/g, 'i');
+  if (CITY_FIX[ascii]) return CITY_FIX[ascii];
+  if (IST_DISTRICTS.includes(low)) return `İstanbul · ${c}`;
+  return c;
+}
+const PinIcon = () => <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.3" /></svg>;
+const ModeIcon = ({ mode }) => (
+  <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {mode === 'remote' ? <><path d="M3.5 11 12 4l8.5 7" /><path d="M5.5 9.5V20h13V9.5" /></> : mode === 'onsite' ? <><rect x="4.5" y="3.5" width="15" height="17" rx="1.5" /><path d="M9 8h1.5M13.5 8H15M9 12h1.5M13.5 12H15M10.5 20.5v-4h3v4" /></> : mode === 'hybrid' ? <><path d="M3.5 12 9 7.5l5.5 4.5" /><path d="M5 11v8h8v-8" /><rect x="15" y="6" width="5.5" height="13" rx="1" /></> : <><circle cx="12" cy="12" r="8.5" /><path d="M9.8 9.6a2.3 2.3 0 1 1 3.2 2.1c-.6.3-1 .8-1 1.5v.4M12 16.8h.01" /></>}
+  </svg>
+);
+/** Çalışma şekli ve şehir etiketleri; bilgi yoksa "belirtilmemiş" yazar. */
+export function WorkTags({ mode, city }) {
+  return (
+    <div className="hz-tags">
+      <span className="hz-tag" data-mode={mode || 'unknown'}><ModeIcon mode={mode} />{MODE[mode] || 'Çalışma şekli belirtilmemiş'}</span>
+      <span className="hz-tag" data-empty={!city || undefined}><PinIcon />{city || 'Şehir belirtilmemiş'}</span>
+    </div>
+  );
+}
+
 const STATUS = { sent: 'Gönderildi', skipped: 'Atlandı', failed: 'Gönderilemedi', replied: 'Dönüş geldi', interview: 'Mülakat', rejected: 'Olumsuz' };
 
 // ---- Gmail -------------------------------------------------------------------
@@ -141,6 +179,7 @@ function PendingItem({ app, gmailConnected, onChange, onConnect }) {
           {app.cv_label && <> · CV: {app.cv_label}</>}
         </p>
       </div>
+      <WorkTags mode={app.work_mode} city={app.city} />
       <SourceLink url={app.source_url} />
       {app.reason && <p className="hz-reason">{app.reason}</p>}
       {edit ? (
@@ -245,6 +284,7 @@ export function SentView() {
             <span className="hz-meta">{STATUS[a.status] || a.status}</span>
             <p>{a.recipient} · {fmt(a.sent_at || a.created_at)}</p>
           </div>
+          <WorkTags mode={a.work_mode} city={a.city} />
           <SourceLink url={a.source_url} />
         </li>
       ))}
@@ -406,8 +446,9 @@ export function ListingsView() {
               <div className="hz-app-head">
                 <h3>{j.title}</h3>
                 {j.score != null && <span className="hz-score" title="CV'ne uygunluk puanı">{j.score}</span>}
-                <p>{[j.company, j.location, SOURCE[j.source] || j.source, fmt(j.received_at)].filter(Boolean).join(' · ')}</p>
+                <p>{[j.company, SOURCE[j.source] || j.source, fmt(j.received_at)].filter(Boolean).join(' · ')}</p>
               </div>
+              <WorkTags {...parseLocation(j.location)} />
               <ListingStatus job={j} />
               {j.reason && <p className="hz-small">{j.reason}</p>}
               <div className="hz-app-foot">

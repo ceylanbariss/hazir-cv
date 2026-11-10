@@ -346,7 +346,10 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget,
     const statuses = status.split(',').filter((x) => APP_STATUSES.includes(x));
     const filter = statuses.length ? `&status=in.(${statuses.join(',')})` : '';
     const limit = Math.min(Number(req.query.limit) || 50, 200);
-    const items = await supabase.select('applications', `user_id=eq.${uid(req)}${filter}&select=${APP_FIELDS}&order=created_at.desc&limit=${limit}`);
+    const q = `user_id=eq.${uid(req)}${filter}&order=created_at.desc&limit=${limit}`;
+    const items = await supabase
+      .select('applications', `${q}&select=${APP_FIELDS},work_mode,city`)
+      .catch(() => supabase.select('applications', `${q}&select=${APP_FIELDS}`)); // sütunlar henüz yoksa
     const cvs = await listCvs(req);
     const label = Object.fromEntries(cvs.map((c) => [c.id, c.label]));
     res.json({ items: items.map((a) => ({ ...a, cv_label: label[a.cv_id] || null })) });
