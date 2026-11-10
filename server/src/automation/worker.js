@@ -6,6 +6,7 @@ import * as P from './prompts.js';
 import { dailyQueries } from './search.js';
 import { variantsFor, searchTitles } from './roles.js';
 import { shouldSkip, hasHiringSignal, domainMatches, rootName, hostOf } from './pages.js';
+import { fixPhrases } from '../lib/phrases.js';
 
 const MIN_SCORE = { job: 70, open_application: 65 };
 const SEEN_DAYS = 120;
@@ -22,16 +23,7 @@ export const dayStart = (now) => {
   return new Date(Date.UTC(tr.getUTCFullYear(), tr.getUTCMonth(), tr.getUTCDate()) - TR_OFFSET_MS).toISOString();
 };
 
-/**
- * Kullanıcının tercih ettiği ifadeler: "yakından / ilgiyle takip ediyorum" → "büyük bir ilgiyle inceledim".
- * Hem yeni taslaklarda hem gönderimden önce kayıtlı taslaklarda uygulanır.
- */
-export function fixPhrases(text) {
-  return String(text || '')
-    .replace(/(?:büyük bir |yakından |ilgiyle |ilgi ile |dikkatle )+(?:takip ediyorum|takip etmekteyim|izliyorum|izlemekteyim)/gi, 'büyük bir ilgiyle inceledim')
-    .replace(/(?:büyük bir |yakından |ilgiyle |ilgi ile )+(?:takip ettim|izledim)/gi, 'büyük bir ilgiyle inceledim')
-    .replace(/\b(?:takip ediyorum|takip etmekteyim)\b/gi, 'büyük bir ilgiyle inceledim');
-}
+export { fixPhrases };
 
 /** Normalises the signature and paragraphing of a generated cover letter. */
 export function fixLetter(text, fullName) {

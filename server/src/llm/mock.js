@@ -251,6 +251,18 @@ const handlers = {
     });
   },
 
+  cover_letter(text) {
+    const cv = between(text, 'cv');
+    const job = between(text, 'job_posting');
+    const name = cv.split('\n').map((l) => l.trim()).find(Boolean) || 'Aday';
+    const skills = SKILLS.filter((k) => hasTerm(cv, k) && hasTerm(job, k)).slice(0, 3);
+    const title = (job.split('\n').map((l) => l.trim()).find(Boolean) || 'Pozisyon').slice(0, 60);
+    return respond({
+      subject: `${title} Başvurusu – ${name}`,
+      letter: `Merhaba,\n\n${title} pozisyonu için başvuruyorum. Şirketinizin çalışmalarını yakından takip ediyorum.\n\nCV'mde yer alan ${skills.join(', ') || 'deneyimlerim'} ilanda aranan niteliklerle örtüşüyor.\n\nGörüşme için uygunum, zamanınız için teşekkür ederim.\n\nSaygılarımla,\n${name}`,
+      used_requirements: skills,
+    });
+  },
   ocr_job_posting() {
     return 'Mock OCR: Frontend Developer\nAranan nitelikler: React, TypeScript, REST, Git. En az 2 yıl deneyim.';
   },

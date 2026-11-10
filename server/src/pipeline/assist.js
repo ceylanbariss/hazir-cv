@@ -2,6 +2,7 @@
 import * as P from '../prompts/tasks.js';
 import { runTask } from '../llm/runTask.js';
 import { unsupportedNumbers } from './text.js';
+import { fixPhrases } from '../lib/phrases.js';
 
 export async function addItem(ctx, input) {
   const out = await runTask(ctx, P.addItem(input));
@@ -38,4 +39,14 @@ export async function integrateGaps(ctx, { gaps, notes, lang }) {
 export async function ocr(ctx, { images }) {
   const text = await runTask(ctx, P.ocrJobPosting({ images }));
   return { text: String(text).trim() };
+}
+
+/** İlana özel ön yazı. Türkçe metinde tercih edilen ifadeler uygulanır; CV'de olmayan sayılar işaretlenir. */
+export async function coverLetter(ctx, input) {
+  const out = await runTask(ctx, P.coverLetter(input));
+  let letter = String(out.letter || '').replace(/\r\n/g, '\n').trim();
+  if (input.lang !== 'en') letter = fixPhrases(letter);
+  letter = letter.replace(/\[[^\]\n]{1,40}\]/g, '').replace(/[ \t]{2,}/g, ' ');
+  const unsupported = unsupportedNumbers(`${input.cv}\n${input.jobPosting}`, letter);
+  return { subject: String(out.subject || '').trim(), letter, usedRequirements: out.used_requirements || [], unsupported };
 }

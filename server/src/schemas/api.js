@@ -61,3 +61,15 @@ export const OcrRequest = z.object({
     .min(1)
     .max(6),
 });
+
+export const CoverLetterRequest = z.object({
+  cv,
+  jobPosting,
+  lang,
+  tone: z.enum(['formal', 'warm']).default('formal'),
+  name: z.string().trim().max(120).optional(),
+});
+
+export const JobFetchRequest = z.object({
+  url: z.string().trim().min(8, 'Bağlantı çok kısa.').max(2000, 'Bağlantı çok uzun.'),
+});

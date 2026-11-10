@@ -19,12 +19,13 @@ const HOUR = 60 * 60 * 1000;
  * Builds the Express app. Dependencies are injected so tests can run the real
  * HTTP stack against a mock LLM.
  */
-export function createApp({ config, llm, logger, budget, semaphore, limiters, supabase, gmail, search, readPage, mailer, checkListing } = {}) {
+export function createApp({ config, llm, logger, budget, semaphore, limiters, supabase, gmail, search, readPage, mailer, checkListing, fetchJob } = {}) {
   const deps = {
     config,
     llm,
     budget: budget || createBudget({ dailyUsd: config.DAILY_BUDGET_USD }),
     semaphore: semaphore || createSemaphore(config.MAX_CONCURRENT_PIPELINES),
+    fetchJob,
   };
   const lim = limiters || {
     heavy: createRateLimiter({ windowMs: HOUR, max: 20 }), // full pipelines, OCR, reports

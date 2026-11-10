@@ -95,3 +95,14 @@ test('rate limit returns 429 with Retry-After', async () => {
   assert.equal(last.status, 429);
   assert.ok(Number(last.headers.get('retry-after')) > 0);
 });
+
+test('cover-letter returns a grounded letter; job/fetch rejects internal URLs', async () => {
+  const r = await post('/api/v1/cover-letter', { cv: fit.cv, jobPosting: fit.jobPosting, lang: 'tr' });
+  assert.equal(r.status, 200);
+  const j = await r.json();
+  assert.ok(j.letter.length > 50);
+  assert.ok(Array.isArray(j.unsupported));
+  const bad = await post('/api/v1/job/fetch', { url: 'http://127.0.0.1:8080/admin' });
+  assert.equal(bad.status, 400);
+  assert.match((await bad.json()).error.message, /bağlantı/i);
+});

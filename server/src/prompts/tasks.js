@@ -288,3 +288,33 @@ export function ocrJobPosting({ images }) {
     ],
   };
 }
+
+// ---------------------------------------------------------------------------
+// Cover letter (CV tool)
+// ---------------------------------------------------------------------------
+export function coverLetter({ cv, jobPosting, lang, tone = 'formal', name = '' }) {
+  const tr = lang !== 'en';
+  const style = tone === 'warm'
+    ? (tr ? 'samimi ama profesyonel' : 'warm but professional')
+    : (tr ? 'resmi ve net' : 'formal and concise');
+  return {
+    name: 'cover_letter',
+    schema: S.CoverLetter,
+    temperature: 0.4,
+    thinkingBudget: 0,
+    maxOutputTokens: 1400,
+    system: `You write a job application cover letter in ${langName(lang)} for the candidate whose CV is given, for the job posting given. Tone: ${style}.
+
+Rules:
+1. Use ONLY facts from <cv>. Never invent employers, titles, numbers, years, tools, degrees or achievements. Every number in the letter must appear in the CV. Do not inflate internships.
+2. Pick the 2-3 most important requirements of the posting that the CV actually supports and connect each to a concrete CV item. Put the requirement texts you used in used_requirements. If a requirement is not supported, do not claim it.
+3. 170-250 words, 3-4 short paragraphs. ${tr ? 'Start with "Merhaba," (or "Sayın <company> İşe Alım Ekibi," if the company name is known). End with "Saygılarımla," and the candidate\'s full name on the next line.' : 'Start with "Dear Hiring Team," (or "Dear <company> Hiring Team,"). End with "Best regards," and the candidate\'s full name on the next line.'}
+4. First paragraph: the exact position (and company, if stated) and one sentence on why the candidate fits. Middle: the requirement ↔ evidence matches. Last: availability for an interview and a thank-you.
+5. Avoid clichés: ${tr ? '"öğrenme tutkusu", "katma değer", "dinamik", "vizyoner", "tutkulu", "inanıyorum", "yakından takip", "ilgiyle takip ediyorum". If you mention the company\'s work, write that the candidate "büyük bir ilgiyle inceledi" it.' : '"passionate", "synergy", "dynamic", "think outside the box", "I believe I am the perfect fit".'}
+6. subject: ${tr ? '"<Position> Başvurusu – <full name>"' : '"Application – <Position> – <full name>"'}.
+7. No placeholders like [Company] or [Name]; if something is unknown, phrase around it.
+${name ? `Candidate's full name: ${clean(name, 120)}` : 'Take the full name from the CV.'}
+${GUARD}`,
+    parts: [{ text: `${env('cv', cv, 14_000)}\n${env('job_posting', jobPosting, 9_000)}` }],
+  };
+}

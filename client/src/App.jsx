@@ -17,6 +17,7 @@ import { bakeProfilePhoto } from './lib/pdfPhoto.js';
 import { tailorCv, interviewTurn, interviewReport as fetchInterviewReport, addItem as addItemApi, integrateGaps as integrateGapsApi, ocrJobPosting, warmUp } from './lib/api.js';
 import { claimRequirement, unclaimRequirement, interviewFocus } from './lib/analysis.js';
 import { RequirementBreakdown, VerificationPanel, PipelineTrace } from './components/AnalysisInsights.jsx';
+import { JobLinkImport, AtsCheck, CoverLetterPanel, AssistantCta } from './components/CvExtras.jsx';
 
 const STAGE_PROGRESS = {
   analyze_inputs: { start: 4, done: 28 },
@@ -90,6 +91,8 @@ const formatLinkedinUrl = (url) => {
 const App = () => {
   const [originalCV, setOriginalCV] = useState('');
   const [jobDescription, setJobDescription] = useState('');
+  // Panelden "Bu ilana özel CV hazırla" ile gelindiyse: /cv?ilan=<bağlantı>
+  const [ilanParam] = useState(() => { try { return new URLSearchParams(window.location.search).get('ilan') || ''; } catch { return ''; } });
   const [optimizedData, setOptimizedData] = useState(null);
   const [profileImage, setProfileImage] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -1867,11 +1870,12 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
                    <input type="file" ref={jobImageInputRef} onChange={handleJobScreenshotUpload} accept="image/*" multiple className="hidden" /> 
                   </div>
                   
+                  <JobLinkImport onText={setJobDescription} initialUrl={ilanParam} autoFetch={!!ilanParam} />
                   <textarea 
                     className="w-full h-24 lg:h-32 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-black focus:border-transparent outline-none placeholder-slate-400 transition-all" 
                     value={jobDescription} 
                     onChange={(e) => setJobDescription(e.target.value)} 
-                    placeholder="İlan metnini kopyalayıp buraya yapıştırın veya sağ üstteki buton ile ekran görüntüsünü yükleyin..." 
+                    placeholder="…ya da ilan metnini buraya yapıştırın / sağ üstteki buton ile ekran görüntüsünü yükleyin" 
                   />
                 </div>
 
@@ -2002,6 +2006,8 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
                             </div>
                          </div>
                       </div>
+
+                      <AtsCheck data={optimizedData} lang={cvLanguage} />
 
                       {optimizedData.analysis.low_confidence === 'few_requirements' && (
                         <p className="-mt-3 mb-6 text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex gap-1.5">
@@ -2163,6 +2169,9 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
                        </button>
                      </div>
                   </div>
+
+                  <CoverLetterPanel cv={originalCV} jobPosting={jobDescription} lang={cvLanguage} name={optimizedData.name} />
+                  <AssistantCta lang={cvLanguage} role={optimizedData.analysis?.job?.title} />
                 </>
               )}
             </div>

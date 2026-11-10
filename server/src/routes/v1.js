@@ -7,6 +7,7 @@ import { openSse, wantsSse, toBody } from '../lib/http.js';
 import { runTailorPipeline } from '../pipeline/tailor.js';
 import * as interview from '../pipeline/interview.js';
 import * as assist from '../pipeline/assist.js';
+import { createJobFetcher } from '../pipeline/jobfetch.js';
 import { PROMPT_VERSION } from '../prompts/tasks.js';
 
 const parse = (schema, body) => {
@@ -20,6 +21,7 @@ const parse = (schema, body) => {
 
 export function v1Router({ deps, limiters }) {
   const { llm, budget, semaphore } = deps;
+  const fetchJob = deps.fetchJob || createJobFetcher();
   const router = express.Router();
   const json = express.json({ limit: '300kb' });
   const jsonLarge = express.json({ limit: '25mb' });
@@ -106,6 +108,28 @@ export function v1Router({ deps, limiters }) {
   router.post('/ocr', rateLimit(limiters.heavy, 'ocr'), jsonLarge, async (req, res) => {
     const input = parse(A.OcrRequest, req.body);
     res.json(await withSlot(() => assist.ocr(ctxFor(req), input)));
+  });
+
+  router.post('/cover-letter', rateLimit(limiters.chat, 'cover_letter'), json, async (req, res) => {
+    const input = parse(A.CoverLetterRequest, req.body);
+    budget.assertAvailable();
+    res.json(await assist.coverLetter(ctxFor(req), input));
+  });
+
+  // İlan bağlantısından metin getirir (yapay zeka kullanmaz).
+  const JOB_FETCH_MESSAGES = {
+    invalid_url: 'Bu bağlantı açılamıyor. https:// ile başlayan bir ilan bağlantısı yapıştır.',
+    not_found: 'İlan bulunamadı; kaldırılmış olabilir.',
+    too_short: 'Bu sayfadan ilan metni okunamadı. Metni kopyalayıp kutuya yapıştırabilirsin.',
+  };
+  router.post('/job/fetch', rateLimit(limiters.chat, 'job_fetch'), json, async (req, res) => {
+    const { url } = parse(A.JobFetchRequest, req.body);
+    const job = await fetchJob(url);
+    req.log.info('job_fetch', { host: job.source || '', ok: job.ok, reason: job.reason });
+    if (!job.ok) {
+      throw Errors.badRequest(JOB_FETCH_MESSAGES[job.reason] || 'Sayfaya ulaşılamadı. İlan metnini kopyalayıp kutuya yapıştırabilirsin.', { reason: job.reason });
+    }
+    res.json({ title: job.title, company: job.company, text: job.text, source: job.source });
   });
 
   router.use(() => {
