@@ -259,7 +259,14 @@ const handlers = {
     const title = (job.split('\n').map((l) => l.trim()).find(Boolean) || 'Pozisyon').slice(0, 60);
     return respond({
       subject: `${title} Başvurusu – ${name}`,
-      letter: `Merhaba,\n\n${title} pozisyonu için başvuruyorum. Şirketinizin çalışmalarını yakından takip ediyorum.\n\nCV'mde yer alan ${skills.join(', ') || 'deneyimlerim'} ilanda aranan niteliklerle örtüşüyor.\n\nGörüşme için uygunum, zamanınız için teşekkür ederim.\n\nSaygılarımla,\n${name}`,
+      greeting: 'Merhaba,',
+      paragraphs: [
+        `${title} pozisyonu için başvuruyorum. Şirketinizin çalışmalarını yakından takip ediyorum.`,
+        `CV'mde yer alan ${skills.join(', ') || 'deneyimlerim'} ilanda aranan niteliklerle örtüşüyor.`,
+        'Görüşme için uygunum, zamanınız için teşekkür ederim.',
+        'Saygılarımla,',
+      ],
+      full_name: name,
       used_requirements: skills,
     });
   },
