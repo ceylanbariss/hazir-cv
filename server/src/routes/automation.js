@@ -147,6 +147,30 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget,
     }
   });
 
+  // Google ile giriş, yönlendirme modu (telefonlar): Google seçilen hesabın kimlik jetonunu buraya POST eder.
+  // Çift gönderimli CSRF jetonu (çerez == gövde) denetlenir; jeton yalnızca adres parçasında (#) sayfaya
+  // döner, sunucu günlüklerine ve başka sitelere gitmez. Oturum, tarayıcıda Supabase'e verilerek açılır.
+  const form = express.urlencoded({ extended: false, limit: '20kb' });
+  router.post('/google/callback', rateLimit(limiter, 'automation'), form, (req, res) => {
+    const back = (hash) => res.redirect(303, `${config.APP_URL || ''}/otomasyon#${hash}`);
+    const cookies = Object.fromEntries(
+      String(req.get('cookie') || '')
+        .split(';')
+        .map((c) => c.trim().split('='))
+        .filter(([k]) => k)
+        .map(([k, ...v]) => [k, decodeURIComponent(v.join('='))]),
+    );
+    const bodyCsrf = String(req.body?.g_csrf_token || '');
+    const credential = String(req.body?.credential || '');
+    if (!bodyCsrf || bodyCsrf !== cookies.g_csrf_token) {
+      req.log.warn('google_callback_csrf');
+      return back('gsi_error=csrf');
+    }
+    if (!/^[\w-]+\.[\w-]+\.[\w-]+$/.test(credential) || credential.length > 8000) return back('gsi_error=token');
+    res.set('Cache-Control', 'no-store');
+    back(`gsi=${credential}`);
+  });
+
   // GitHub Actions günlük tetikleyicisi: önce kullanıcı listesini alır, sonra her kullanıcı için ayrı çağırır.
   const cronOnly = (req, res, next) => (secretMatches(req.get('x-cron-secret'), config.CRON_SECRET) ? next() : next(Errors.notFound()));
   const autoOpts = { runs: Math.min(config.AUTO_RUNS_PER_DAY, config.RUNS_PER_DAY), gap: config.AUTO_RUN_GAP_HOURS };
