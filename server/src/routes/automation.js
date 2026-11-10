@@ -31,6 +31,18 @@ const WELCOME = {
 };
 
 const text = (max) => z.string().trim().min(1).max(max);
+
+/** "Backend Developer (Full Stack) - Hybrid" → "Backend Developer"; "(m/w/d)", "Uzaktan" vb. atılır. */
+export function cleanRoleTitle(title) {
+  return String(title || '')
+    .replace(/\([^)]*\)|\[[^\]]*\]/g, ' ')
+    .replace(/\s*[-–|·,]\s*(hybrid|hibrit|remote|uzaktan|on-?site|ofisten|ofiste|istanbul|İstanbul|ankara|izmir|İzmir|eskişehir|Eskişehir|türkiye|Türkiye|turkey)(?=$|[\s,.;/]).*$/iu, '')
+    .replace(/\b(hybrid|hibrit|remote|uzaktan)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s\-–|·,]+|[\s\-–|·,]+$/g, '')
+    .slice(0, 60)
+    .trim();
+}
 const list = (max, len = 60) => z.array(text(len)).max(max).transform((a) => [...new Set(a)]);
 
 const PatchProfile = z
@@ -328,6 +340,22 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget,
     }
     res.json({ targets });
   });
+  // CV aracından "bu ilan için asistanı kur": ilanın unvanını aranan rollere ekler.
+  router.post('/targets/role', json, async (req, res) => {
+    const role = cleanRoleTitle(parse(z.object({ role: text(120) }), req.body).role);
+    if (!role) throw Errors.badRequest('Rol adı okunamadı.');
+    const [t] = await supabase.select('targets', `user_id=eq.${uid(req)}&select=roles`);
+    if (!t) return res.json({ status: 'no_setup', role });
+    const roles = Array.isArray(t.roles) ? t.roles : [];
+    const key = (x) => x.toLocaleLowerCase('tr').replace(/\s+/g, ' ').trim();
+    if (roles.some((r) => key(r) === key(role))) return res.json({ status: 'exists', role, roles });
+    if (roles.length >= 15) return res.json({ status: 'full', role, roles });
+    const next = [...roles, role];
+    await supabase.update('targets', `user_id=eq.${uid(req)}`, { roles: next, updated_at: new Date().toISOString() });
+    req.log.info('target_role_added', { count: next.length });
+    res.json({ status: 'added', role, roles: next });
+  });
+
   // Seçilen roller için benzer başlıklar (kurulumda rollerin altında gösterilir).
   router.post('/roles/expand', heavy, json, async (req, res) => {
     const { roles } = parse(z.object({ roles: z.array(text(60)).min(1).max(15) }), req.body);

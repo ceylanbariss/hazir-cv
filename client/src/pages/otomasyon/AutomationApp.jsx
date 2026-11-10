@@ -2,7 +2,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { authConfigured, signInWithGoogle, signInWithIdToken, completeRedirect, getSession, onAuthChange, signOut } from '../../lib/auth.js';
 import { googleConfigured, renderGoogleButton } from '../../lib/google.js';
-import { getMe, updateMe, getInbox, markInboxRead } from '../../lib/automationApi.js';
+import { getMe, updateMe, getInbox, markInboxRead, addTargetRole } from '../../lib/automationApi.js';
 import { navigate } from '../../router.js';
 import { Shell, TopBar, Footer, Spinner } from '../../hz/ui.jsx';
 import Wizard from './Wizard.jsx';
@@ -182,7 +182,7 @@ function SetupCallout({ profile, onStart, gmail, onConnect }) {
   );
 }
 
-export function Panel({ profile, unread, setUnread, onSignOut, onStartSetup, inbox, notice }) {
+export function Panel({ profile, unread, setUnread, onSignOut, onStartSetup, inbox, notice, roleNotice }) {
   const [tab, setTab] = useState(notice ? 'settings' : 'inbox');
   const onRead = useCallback(() => setUnread(0), [setUnread]);
   const [gmail, reloadGmail] = useGmail();
@@ -196,6 +196,7 @@ export function Panel({ profile, unread, setUnread, onSignOut, onStartSetup, inb
       </TopBar>
       <main className="hz-wrap hz-panel-main">
         {notice && <p className={notice[0] === 'ok' ? 'hz-ok' : 'hz-notice'} role="status" style={{ marginBottom: 20 }}>{notice[1]}</p>}
+        {roleNotice && <p className={roleNotice[0] === 'ok' ? 'hz-ok' : 'hz-notice'} role="status" style={{ marginBottom: 20 }}>{roleNotice[1]}</p>}
         {connectErr && <p className="hz-notice" role="alert" style={{ marginBottom: 20 }}>{connectErr}</p>}
         <SetupCallout profile={profile} onStart={onStartSetup} gmail={gmail} onConnect={onConnect} />
         <div className="hz-panel">
@@ -223,7 +224,7 @@ export function Panel({ profile, unread, setUnread, onSignOut, onStartSetup, inb
   );
 }
 
-export function SetupPage({ profile, onExit, onDone, onSignOut }) {
+export function SetupPage({ profile, onExit, onDone, onSignOut, initialRole }) {
   return (
     <Shell>
       <TopBar>
@@ -231,7 +232,7 @@ export function SetupPage({ profile, onExit, onDone, onSignOut }) {
         <button type="button" className="hz-link" onClick={onSignOut}>Çıkış yap</button>
       </TopBar>
       <main className="hz-narrow" style={{ paddingBottom: 64 }}>
-        <Wizard profile={profile} onExit={onExit} onDone={onDone} />
+        <Wizard profile={profile} onExit={onExit} onDone={onDone} initialRole={initialRole} />
       </main>
     </Shell>
   );
@@ -250,6 +251,29 @@ export default function AutomationApp() {
     if (code) window.history.replaceState(null, '', window.location.pathname);
     return code ? gmailReturnMessage(code) : null;
   });
+
+  // CV aracından "Bu rolü asistanıma ekle": ?rol=<unvan> → aranan rollere eklenir, sonuç bir kez gösterilir.
+  const [pendingRole, setPendingRole] = useState(() => {
+    const rol = new URLSearchParams(window.location.search).get('rol');
+    if (rol) window.history.replaceState(null, '', window.location.pathname);
+    return rol ? rol.slice(0, 120) : null;
+  });
+  const [roleNotice, setRoleNotice] = useState(null);
+  const [setupRole, setSetupRole] = useState(null);
+
+  useEffect(() => {
+    if (!pendingRole || !me?.kvkk_accepted_at) return;
+    const role = pendingRole;
+    setPendingRole(null);
+    addTargetRole(role)
+      .then((r) => {
+        if (r.status === 'added') setRoleNotice(['ok', `"${r.role}" aradığın rollere eklendi. Bir sonraki taramadan itibaren bu ve benzer başlıklardaki ilanlar da aranacak.`]);
+        else if (r.status === 'exists') setRoleNotice(['ok', `"${r.role}" zaten aradığın roller arasında; bu ilanlar taramada aranıyor.`]);
+        else if (r.status === 'full') setRoleNotice(['err', `"${r.role}" eklenemedi: en fazla 15 rol seçebilirsin. Ayarlar → Kurulumu düzenle'den birini çıkarıp ekleyebilirsin.`]);
+        else { setSetupRole(r.role); setSetup(true); }
+      })
+      .catch((e) => setRoleNotice(['err', `Rol eklenemedi: ${e.message}`]));
+  }, [pendingRole, me]);
 
   useEffect(() => {
     if (!authConfigured) return;
@@ -273,6 +297,6 @@ export default function AutomationApp() {
   if (err) return <Shell><TopBar /><main className="hz-narrow" style={{ display: 'grid', gap: 14 }}><p className="hz-notice" role="alert">{err}</p><button type="button" className="hz-link" style={{ justifySelf: 'start' }} onClick={() => { setErr(null); signOut(); }}>Çıkış yap ve tekrar dene</button></main></Shell>;
   if (!me) return <Shell><Spinner /></Shell>;
   if (!me.kvkk_accepted_at) return <Consent email={me.email} onSignOut={signOut} onAccept={async () => setMe((await updateMe({ kvkk_accepted: true })).profile)} />;
-  if (setup) return <SetupPage profile={me} onSignOut={signOut} onExit={() => { setSetup(false); getMe().then((r) => setMe(r.profile)).catch(() => {}); }} onDone={(p) => { setMe(p); setSetup(false); }} />;
-  return <Panel profile={me} unread={unread} setUnread={setUnread} onSignOut={signOut} onStartSetup={() => setSetup(true)} notice={notice} />;
+  if (setup) return <SetupPage profile={me} initialRole={setupRole} onSignOut={signOut} onExit={() => { setSetup(false); getMe().then((r) => setMe(r.profile)).catch(() => {}); }} onDone={(p) => { setMe(p); setSetup(false); }} />;
+  return <Panel profile={me} unread={unread} setUnread={setUnread} onSignOut={signOut} onStartSetup={() => setSetup(true)} notice={notice} roleNotice={roleNotice} />;
 }

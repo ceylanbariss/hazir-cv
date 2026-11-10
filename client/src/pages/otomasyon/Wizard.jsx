@@ -352,7 +352,7 @@ function StepPrefs({ p, set }) {
 }
 
 // ---- Sihirbaz ---------------------------------------------------------------
-export default function Wizard({ profile, onExit, onDone }) {
+export default function Wizard({ profile, onExit, onDone, initialRole }) {
   const [data, setData] = useState(null);
   const [step, setStep] = useState(Math.min(Math.max((profile.setup_step || 1) - 2, 0), 3));
   const [cvs, setCvs] = useState([]);
@@ -368,7 +368,7 @@ export default function Wizard({ profile, onExit, onDone }) {
         setData(d);
         setCvs(d.cvs);
         const seniority = d.cvs.find((c) => c.is_default)?.extracted_profile?.seniority;
-        setT(d.targets || { roles: [], excluded: [], cities: [], work_modes: ['remote', 'hybrid'], seniority: seniority ? [seniority] : ['junior'], long_term_internship: true });
+        setT(d.targets || { roles: initialRole ? [initialRole] : [], excluded: [], cities: [], work_modes: ['remote', 'hybrid'], seniority: seniority ? [seniority] : ['junior'], long_term_internship: true });
         setP({ mode: d.profile.mode, daily_limit: d.profile.daily_limit, company_cooldown_days: d.profile.company_cooldown_days, open_applications: d.profile.open_applications, portfolio_url: d.profile.portfolio_url || '', scan_hour: d.profile.scan_hour ?? 9 });
       })
       .catch((e) => setErr(e.message));
