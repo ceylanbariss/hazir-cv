@@ -134,6 +134,8 @@ export const AddItem = {
 // Cover letter for the CV tool (grounded in the CV, tailored to the job posting).
 export const CoverLetter = z.object({
   subject: z.string(),
-  letter: z.string(),
+  greeting: z.string(),
+  paragraphs: z.array(z.string()).min(1).max(5),
+  full_name: z.string(),
   used_requirements: z.array(z.string()),
 });

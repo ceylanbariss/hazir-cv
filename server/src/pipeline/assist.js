@@ -44,9 +44,18 @@ export async function ocr(ctx, { images }) {
 /** İlana özel ön yazı. Türkçe metinde tercih edilen ifadeler uygulanır; CV'de olmayan sayılar işaretlenir. */
 export async function coverLetter(ctx, input) {
   const out = await runTask(ctx, P.coverLetter(input));
-  let letter = String(out.letter || '').replace(/\r\n/g, '\n').trim();
-  if (input.lang !== 'en') letter = fixPhrases(letter);
-  letter = letter.replace(/\[[^\]\n]{1,40}\]/g, '').replace(/[ \t]{2,}/g, ' ');
+  const tr = input.lang !== 'en';
+  const tidy = (t) => {
+    let x = String(t || '').replace(/\[[^\]\n]{1,40}\]/g, '').replace(/\s+/g, ' ').trim();
+    return tr ? fixPhrases(x) : x;
+  };
+  const paragraphs = (out.paragraphs || []).map(tidy).filter(Boolean)
+    // Model bazen selamlamayı ya da kapanışı da paragraf olarak döndürür; tekrarlanmasın.
+    .filter((p) => !/^(merhaba|sayın|dear)\b[^.]{0,60},?$/i.test(p) && !/^(saygılarımla|best regards|sincerely)\b/i.test(p));
+  const name = tidy(input.name || out.full_name);
+  const greeting = tidy(out.greeting) || (tr ? 'Merhaba,' : 'Dear Hiring Team,');
+  const signOff = tr ? 'Saygılarımla,' : 'Best regards,';
+  const letter = [greeting, ...paragraphs, name ? `${signOff}\n${name}` : signOff].join('\n\n');
   const unsupported = unsupportedNumbers(`${input.cv}\n${input.jobPosting}`, letter);
-  return { subject: String(out.subject || '').trim(), letter, usedRequirements: out.used_requirements || [], unsupported };
+  return { subject: tidy(out.subject), letter, usedRequirements: out.used_requirements || [], unsupported };
 }
