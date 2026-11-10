@@ -49,6 +49,13 @@ export function buildClaims(t) {
     );
   });
   t.skills.forEach((text, i) => claims.push({ id: `K${i + 1}`, section: 'skills', index: i, text }));
+  (t.sections || []).forEach((sec, s) =>
+    sec.entries.forEach((entry, e) =>
+      entry.bullets_v1.forEach((text, b) =>
+        claims.push({ id: `X${s + 1}.${e + 1}.${b + 1}`, section: 'extra', sec: s, exp: e, bullet: b, text, source: entry.bullet_sources?.[b] || '' }),
+      ),
+    ),
+  );
   return claims;
 }
 
@@ -83,16 +90,17 @@ export function remediate(tailored, judged) {
 
   for (const c of judged) {
     if (c.verdict !== 'unsupported') continue;
-    if (c.section === 'experience') {
-      const exp = t.experience[c.exp];
+    if (c.section === 'experience' || c.section === 'extra') {
+      const exp = c.section === 'extra' ? t.sections[c.sec].entries[c.exp] : t.experience[c.exp];
       if (c.source && c.source_verified) {
         exp.bullets_v1[c.bullet] = c.source;
         if (exp.bullets_v3[c.bullet] !== undefined) exp.bullets_v3[c.bullet] = c.source;
         fixes.push({ claim: c.id, action: 'reverted_to_original', before: c.text, after: c.source });
         c.remediation = 'reverted_to_original';
       } else {
-        if (!removeBullets.has(c.exp)) removeBullets.set(c.exp, new Set());
-        removeBullets.get(c.exp).add(c.bullet);
+        const key = c.section === 'extra' ? `x${c.sec}.${c.exp}` : c.exp;
+        if (!removeBullets.has(key)) removeBullets.set(key, new Set());
+        removeBullets.get(key).add(c.bullet);
         fixes.push({ claim: c.id, action: 'removed', before: c.text });
         c.remediation = 'removed';
       }
@@ -103,7 +111,8 @@ export function remediate(tailored, judged) {
     }
   }
   for (const [e, set] of removeBullets) {
-    const exp = t.experience[e];
+    const m = typeof e === 'string' && e.match(/^x(\d+)\.(\d+)$/);
+    const exp = m ? t.sections[+m[1]].entries[+m[2]] : t.experience[e];
     const keep = (_, i) => !set.has(i);
     exp.bullets_v1 = exp.bullets_v1.filter(keep);
     exp.bullets_v3 = exp.bullets_v3.filter(keep);
@@ -165,5 +174,30 @@ export function tailoredText(t) {
     ...t.skills,
     ...t.education.map((e) => `${e.degree} ${e.details}`),
     ...t.additional,
+    ...(t.sections || []).flatMap((sec) => [...sec.items, ...sec.entries.flatMap((e) => [e.role, ...e.bullets_v1])]),
   ].join('\n');
+}
+
+// Orijinal CV'de olup çıktıda karşılığı olmayan bölümler (model bir bölümü atlarsa kullanıcıya söylenir).
+const SECTION_GROUPS = [
+  ['Projeler', /^(kişisel |akademik |öne çıkan |seçilmiş )?(projeler|projelerim|proje deneyimi|projects|personal projects|academic projects|selected projects)$/i],
+  ['Gönüllülük', /^(gönüllülük|gönüllü (çalışmalar|deneyim)|volunteer(ing)?( experience)?)$/i],
+  ['Topluluk ve Liderlik', /^(topluluk|topluluklar|kulüp|kulüpler|öğrenci toplulukları|liderlik|leadership|clubs?|communit(y|ies)|extracurricular activities|aktiviteler|etkinlikler)$/i],
+  ['Yayınlar', /^(yayınlar|makaleler|publications)$/i],
+  ['Ödüller', /^(ödüller|başarılar|ödül ve başarılar|awards|honors|achievements)$/i],
+  ['Referanslar', /^(referanslar|references)$/i],
+];
+const headingKey = (h) => SECTION_GROUPS.find(([, re]) => re.test(String(h).trim().replace(/[:：]$/, '')))?.[0];
+
+export function droppedSections(cv, tailored) {
+  const inCv = new Set(
+    String(cv)
+      .split(/\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 2 && l.length <= 40)
+      .map(headingKey)
+      .filter(Boolean),
+  );
+  const out = new Set((tailored.sections || []).map((sec) => headingKey(sec.heading)).filter(Boolean));
+  return [...inCv].filter((k) => !out.has(k));
 }

@@ -58,3 +58,15 @@ test('a posting with very few requirements is flagged as low confidence', async 
   assert.ok(r.analysis.requirements.length < 4);
   assert.equal(r.analysis.low_confidence, 'few_requirements');
 });
+
+test('projects section is kept, not dropped', async () => {
+  const c = CASES.find((x) => x.id === 'tr_frontend_fit');
+  const cv = `${c.cv}\nProjeler\nHazır CV\n- React ile ilana göre CV hazırlayan bir web uygulaması geliştirdim.\n- Kullanıcılar için PDF dışa aktarma ekledim.`;
+  const r = await runTailorPipeline({ llm: createMockProvider(), trace: [] }, { ...c, cv });
+  const proj = r.sections.find((s) => s.heading === 'Projeler');
+  assert.ok(proj, 'Projeler bölümü çıktıda olmalı');
+  assert.equal(proj.entries[0].role, 'Hazır CV');
+  assert.equal(proj.entries[0].bullets_v1.length, 2);
+  assert.equal(r.analysis.dropped_sections, undefined);
+  assert.ok(r.verification.claims.some((cl) => cl.section === 'extra'), 'proje maddeleri de doğrulanır');
+});

@@ -17,7 +17,7 @@ import { bakeProfilePhoto } from './lib/pdfPhoto.js';
 import { tailorCv, interviewTurn, interviewReport as fetchInterviewReport, addItem as addItemApi, integrateGaps as integrateGapsApi, ocrJobPosting, warmUp } from './lib/api.js';
 import { claimRequirement, unclaimRequirement, interviewFocus } from './lib/analysis.js';
 import { RequirementBreakdown, VerificationPanel, PipelineTrace } from './components/AnalysisInsights.jsx';
-import { JobLinkImport, AtsCheck, CoverLetterPanel, AssistantCta } from './components/CvExtras.jsx';
+import { JobLinkImport, AtsCheck, CoverLetterPanel, AssistantCta, KeptContentNotes } from './components/CvExtras.jsx';
 
 const STAGE_PROGRESS = {
   analyze_inputs: { start: 4, done: 28 },
@@ -1059,7 +1059,8 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
   const handleRevertClaim = (claim) => {
     setOptimizedData(prev => {
         const newData = JSON.parse(JSON.stringify(prev));
-        for (const exp of newData.experience || []) {
+        const groups = [newData.experience || [], ...Object.keys(newData).filter(k => k.startsWith('custom_') && Array.isArray(newData[k]) && typeof newData[k][0] === 'object').map(k => newData[k])];
+        for (const exp of groups.flat()) {
             const idx = (exp.bullets_v1 || []).indexOf(claim.text);
             if (idx >= 0) {
                 exp.bullets_v1[idx] = claim.source;
@@ -1138,6 +1139,22 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
       let parsedData = sanitizeData(result);
       if (parsedData.experience) parsedData.experience = parsedData.experience.map(i => ({...i, id: Math.random().toString(36).substr(2, 9)}));
       if (parsedData.education) parsedData.education = parsedData.education.map(i => ({...i, id: Math.random().toString(36).substr(2, 9)}));
+      // CV'deki diğer bölümler (Projeler, Topluluk, Gönüllülük…) özel bölüm olarak korunur; hiçbiri kaybolmaz.
+      const extraHeadings = {};
+      const projectIds = [];
+      const otherIds = [];
+      (Array.isArray(result.sections) ? result.sections : []).forEach((sec, i) => {
+        const id = `custom_cv${i}_${Math.random().toString(36).slice(2, 7)}`;
+        parsedData[id] = sec.kind === 'simple'
+          ? (sec.items || [])
+          : (sec.entries || []).map(e => ({ ...e, bullets: [...(e.bullets_v1 || [])], id: Math.random().toString(36).substr(2, 9) }));
+        if (!parsedData[id].length) { delete parsedData[id]; return; }
+        extraHeadings[id] = String(sec.heading || '').toLocaleUpperCase(lang === 'en' ? 'en' : 'tr');
+        (/proje|project/i.test(sec.heading) ? projectIds : otherIds).push(id);
+      });
+      delete parsedData.sections;
+      setCustomHeadings(extraHeadings);
+      setSectionsOrder(['summary', 'experience', ...projectIds, 'education', 'skills', ...otherIds, 'additional']);
       setOptimizedData(parsedData);
     } catch (err) {
       setError(err.message || 'Optimizasyon sırasında bir hata oluştu. Lütfen tekrar deneyin.');
@@ -2008,6 +2025,7 @@ const removeBulletPoint = (section, expIndex, bulletIndex) => {
                       </div>
 
                       <AtsCheck data={optimizedData} lang={cvLanguage} />
+                      <KeptContentNotes analysis={optimizedData.analysis} lang={cvLanguage} />
 
                       {optimizedData.analysis.low_confidence === 'few_requirements' && (
                         <p className="-mt-3 mb-6 text-[11px] font-semibold text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex gap-1.5">

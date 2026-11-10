@@ -59,6 +59,17 @@ export const Tailored = z.object({
   education: z.array(z.object({ degree: z.string(), school: z.string(), date: z.string(), details: z.string() })),
   skills: z.array(z.string()),
   additional: z.array(z.string()),
+  // CV'deki diğer bölümler (Projeler, Topluluk / Gönüllülük, Yayınlar, Ödüller …) kaybolmasın diye.
+  sections: z.array(
+    z.object({
+      heading: z.string(),
+      kind: z.enum(['detailed', 'simple']),
+      entries: z.array(Experience),
+      items: z.array(z.string()),
+    }),
+  ),
+  // Model bir şeyi ilanla ilgisiz bulsa bile CV'den çıkarmaz; yalnızca önerir.
+  removal_suggestions: z.array(z.object({ item: z.string(), reason: z.string() })),
 });
 
 export const ClaimVerdicts = z.object({
