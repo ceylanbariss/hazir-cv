@@ -43,6 +43,11 @@ export function createSupabase({ url, serviceKey, fetchImpl = fetch, timeoutMs =
       const r = await call('/auth/v1/user', { auth: accessToken });
       return r.ok && r.data?.id ? r.data : null;
     },
+    /** Deletes the Auth user; every table cascades from profiles → auth.users. */
+    async deleteUser(userId) {
+      const r = await call(`/auth/v1/admin/users/${encodeURIComponent(userId)}`, { method: 'DELETE' });
+      if (!r.ok && r.status !== 404) throw Errors.upstream('Hesap silinemedi. Lütfen tekrar deneyin.', { status: r.status });
+    },
     select: (table, query) => rest(`${table}?${query}`),
     insert: (table, rows, { upsert = false, onConflict } = {}) =>
       rest(`${table}${onConflict ? `?on_conflict=${onConflict}` : ''}`, {
