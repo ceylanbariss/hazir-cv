@@ -111,3 +111,5 @@ export const interviewReport = (body) => post('/api/v1/interview/report', body);
 export const addItem = (body) => post('/api/v1/assist/add-item', body, { timeoutMs: 45_000 });
 export const integrateGaps = (body) => post('/api/v1/assist/integrate-gaps', body, { timeoutMs: 45_000 });
 export const ocrJobPosting = (images) => post('/api/v1/ocr', { images }, { timeoutMs: 90_000 });
+export const coverLetter = (body) => post('/api/v1/cover-letter', body, { timeoutMs: 60_000 });
+export const fetchJobFromUrl = (url) => post('/api/v1/job/fetch', { url }, { timeoutMs: 30_000 });

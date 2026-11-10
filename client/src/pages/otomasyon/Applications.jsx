@@ -31,6 +31,17 @@ function SourceLink({ url }) {
   );
 }
 
+/** CV aracını bu ilanla açar: ilan metni bağlantıdan otomatik gelir. */
+export function TailorLink({ url }) {
+  if (!url) return null;
+  const href = `/cv?ilan=${encodeURIComponent(url)}`;
+  return (
+    <a className="hz-link hz-tailor" href={href} onClick={(e) => { e.preventDefault(); navigate(href); }}>
+      Bu ilana özel CV hazırla →
+    </a>
+  );
+}
+
 // ---- Çalışma şekli ve şehir ----------------------------------------------------
 const MODE = { remote: 'Uzaktan', hybrid: 'Hibrit', onsite: 'Ofiste' };
 /** "İstanbul (Hibrit)", "Greater Istanbul (Hybrid)", "Uzaktan" → { mode, city } */
@@ -183,6 +194,7 @@ function PendingItem({ app, gmailConnected, onChange, onConnect }) {
       </div>
       <WorkTags mode={app.work_mode} city={app.city} />
       <SourceLink url={app.source_url} />
+      {app.kind === 'job' && <TailorLink url={app.source_url} />}
       {app.reason && <p className="hz-reason">{app.reason}</p>}
       {edit ? (
         <div style={{ display: 'grid', gap: 10 }}>
@@ -459,6 +471,7 @@ export function ListingsView() {
                   <span className="hz-source-url">{shortUrl(j.url)}</span>
                   <span aria-hidden="true">↗</span>
                 </a>
+                {j.status !== 'closed' && <TailorLink url={j.url} />}
                 <button type="button" className="hz-link" onClick={() => hide(j.id)}>Kaldır</button>
               </div>
             </li>
