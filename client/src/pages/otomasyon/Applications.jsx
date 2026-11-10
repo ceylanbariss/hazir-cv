@@ -1,6 +1,8 @@
 // Faz 2: onay bekleyen başvurular, gönderilenler, Gmail bağlantısı ve elle tarama.
 import React, { useCallback, useEffect, useState } from 'react';
-import { listApplications, updateApplication, sendApplication, getGmail, connectGmail, disconnectGmail, runNowStream, listAlerts, removeAlert, checkAlerts, listRuns, updateMe } from '../../lib/automationApi.js';
+import { listApplications, updateApplication, sendApplication, getGmail, connectGmail, disconnectGmail, runNowStream, listAlerts, removeAlert, checkAlerts, listRuns, updateMe, deleteAccount } from '../../lib/automationApi.js';
+import { signOut } from '../../lib/auth.js';
+import { navigate } from '../../router.js';
 import { Spinner } from '../../hz/ui.jsx';
 
 const fmt = (iso) => new Date(iso).toLocaleString('tr-TR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' });
@@ -498,6 +500,37 @@ function RunHistory({ scanHour }) {
   );
 }
 
+// ---- Hesap silme --------------------------------------------------------------
+function DeleteAccount() {
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const run = async () => {
+    setBusy(true); setErr(null);
+    try { await deleteAccount(); await signOut().catch(() => {}); navigate('/'); } catch (e) { setErr(e.message); setBusy(false); }
+  };
+  return (
+    <section className="hz-danger">
+      <h3 className="hz-h3">Hesabı sil</h3>
+      <p className="hz-small">CV'lerin, hedeflerin, başvuru kayıtların, ilanların ve Gmail bağlantın kalıcı olarak silinir; Gmail erişimi Google'da da iptal edilir. Bu işlem geri alınamaz.</p>
+      {!open ? (
+        <div><button type="button" className="hz-btn hz-btn-sm hz-btn-danger" onClick={() => setOpen(true)}>Hesabımı ve verilerimi sil</button></div>
+      ) : (
+        <div className="hz-danger-confirm">
+          <label className="hz-small" htmlFor="hz-del">Onaylamak için <b>SIL</b> yaz</label>
+          <input id="hz-del" className="hz-input" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" />
+          <div className="hz-actions">
+            <button type="button" className="hz-btn hz-btn-sm hz-btn-danger" disabled={!['SIL', 'SİL'].includes(typed.trim().toLocaleUpperCase('tr')) && typed.trim().toUpperCase() !== 'SIL' || busy} onClick={run}>{busy ? <><span className="hz-spin" />Siliniyor</> : 'Kalıcı olarak sil'}</button>
+            <button type="button" className="hz-link" onClick={() => { setOpen(false); setTyped(''); }}>Vazgeç</button>
+          </div>
+        </div>
+      )}
+      {err && <p className="hz-notice" role="alert">{err}</p>}
+    </section>
+  );
+}
+
 // ---- Ayarlar ------------------------------------------------------------------
 export function SettingsView({ gmail, reloadGmail, onConnect, onEditSetup, scanHour = 9, dailySummary = true, email }) {
   const [busy, setBusy] = useState(false);
@@ -549,6 +582,7 @@ export function SettingsView({ gmail, reloadGmail, onConnect, onEditSetup, scanH
         <p className="hz-small">CV'lerin, roller, şehirler, günlük limit, tarama saati ve şirket bekleme süresi kurulumda.</p>
         <div><button type="button" className="hz-btn hz-btn-sm" onClick={onEditSetup}>Kurulumu düzenle</button></div>
       </section>
+      <DeleteAccount />
     </div>
   );
 }

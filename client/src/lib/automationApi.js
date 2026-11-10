@@ -47,6 +47,7 @@ export const listAlerts = () => request('/alerts');
 export const removeAlert = (id) => request(`/alerts/${id}`, { method: 'DELETE' });
 export const listRuns = () => request('/runs');
 export const checkAlerts = () => request('/alerts/check', { method: 'POST' });
+export const deleteAccount = () => request('/me', { method: 'DELETE', body: { confirm: 'SIL' } });
 
 /** Starts today's scan and streams its steps: onEvent({ type: 'progress' | 'result' | 'error', ... }). */
 export async function runNowStream(onEvent) {

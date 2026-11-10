@@ -358,3 +358,13 @@ test('work mode is read from the listing page when the alert e-mail lacks it', (
   assert.equal(mergeLocation('', { mode: 'remote', city: 'İzmir' }), 'İzmir (Uzaktan)');
   assert.equal(mergeLocation(null, {}), null);
 });
+
+test('account deletion needs confirmation and removes the profile and everything under it', async () => {
+  const H = { Authorization: 'Bearer tok', 'Content-Type': 'application/json' };
+  const bad = await fetch(`${base}/me`, { method: 'DELETE', headers: H, body: JSON.stringify({}) });
+  assert.equal(bad.status, 400);
+  assert.ok(sb.db.profiles.some((p) => p.id === UID));
+  const ok = await fetch(`${base}/me`, { method: 'DELETE', headers: H, body: JSON.stringify({ confirm: 'SIL' }) });
+  assert.equal(ok.status, 200);
+  assert.ok(!sb.db.profiles.some((p) => p.id === UID));
+});

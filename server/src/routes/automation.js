@@ -332,6 +332,21 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget,
     res.json({ url: gmail.authUrl({ state, loginHint: req.user.email }) });
   });
 
+  // Hesabı ve tüm verileri sil: Gmail erişimi Google'da iptal edilir, CV dosyaları ve tüm kayıtlar silinir.
+  router.delete('/me', json, async (req, res) => {
+    if (req.body?.confirm !== 'SIL') throw Errors.badRequest('Silmeyi onaylamak için "SIL" yazmalısın.');
+    const [conn] = await supabase.select('gmail_connections', `user_id=eq.${uid(req)}&select=refresh_token_enc`).catch(() => []);
+    if (conn && gmail && sealer) {
+      try { await gmail.revoke(sealer.decrypt(conn.refresh_token_enc)); } catch { /* zaten geçersiz */ }
+    }
+    const files = (await supabase.select('cvs', `user_id=eq.${uid(req)}&select=storage_path`).catch(() => [])).map((c) => c.storage_path).filter(Boolean);
+    if (files.length && supabase.removeFiles) await supabase.removeFiles('cvs', files).catch((err) => req.log.warn('account_delete_files_failed', { error: err.message }));
+    // profiles silinince diğer tüm tablolar (cvs, targets, applications, alert_jobs, …) zincirleme silinir.
+    await supabase.remove('profiles', `id=eq.${uid(req)}`);
+    if (supabase.deleteUser) await supabase.deleteUser(req.user.id).catch((err) => req.log.warn('account_delete_auth_failed', { error: err.message }));
+    req.log.info('account_deleted', { userId: req.user.id });
+    res.json({ deleted: true });
+  });
   router.delete('/gmail', async (req, res) => {
     const [conn] = await supabase.remove('gmail_connections', `user_id=eq.${uid(req)}`);
     if (conn && gmail && sealer) {
