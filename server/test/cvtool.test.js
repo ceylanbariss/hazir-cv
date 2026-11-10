@@ -69,3 +69,12 @@ test('cover letter applies preferred phrasing and flags numbers not in the CV', 
   assert.deepEqual(out.unsupported, []);
   assert.ok(out.usedRequirements.includes('React'));
 });
+
+test('cleanRoleTitle drops work mode, location and gender markers', async () => {
+  const { cleanRoleTitle } = await import('../src/routes/automation.js');
+  assert.equal(cleanRoleTitle('Backend Developer (Full Stack) - Hybrid'), 'Backend Developer');
+  assert.equal(cleanRoleTitle('İş Analisti – İstanbul'), 'İş Analisti');
+  assert.equal(cleanRoleTitle('Software Engineer (m/w/d)'), 'Software Engineer');
+  assert.equal(cleanRoleTitle('Remote Data Analyst'), 'Data Analyst');
+  assert.equal(cleanRoleTitle('Yazılım Geliştirme Mühendisi'), 'Yazılım Geliştirme Mühendisi');
+});

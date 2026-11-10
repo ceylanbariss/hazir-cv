@@ -250,8 +250,8 @@ export function AssistantCta({ lang, role }) {
           <p className="text-xs text-white/70 mt-1 leading-relaxed">
             {T(lang, 'Başvuru asistanı bu CV ile sana uygun ilanları tarar, her biri için ön yazı hazırlar ve sen onaylayınca kendi Gmail\'inden gönderir. Ücretsiz.', 'The assistant scans for matching jobs, drafts a letter for each and sends from your Gmail once you approve. Free.')}
           </p>
-          <button onClick={() => navigate('/otomasyon')} className="mt-3 inline-flex items-center gap-1.5 bg-white text-slate-900 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-slate-100 active:scale-[0.98] transition-all">
-            {T(lang, 'Başvuru asistanını kur', 'Set up the assistant')} <ArrowRight className="w-3.5 h-3.5" />
+          <button onClick={() => navigate(role ? `/otomasyon?rol=${encodeURIComponent(role)}` : '/otomasyon')} className="mt-3 inline-flex items-center gap-1.5 bg-white text-slate-900 text-xs font-bold px-4 py-2.5 rounded-xl hover:bg-slate-100 active:scale-[0.98] transition-all">
+            {role ? T(lang, 'Bu rolü asistanıma ekle', 'Add this role to my assistant') : T(lang, 'Başvuru asistanını kur', 'Set up the assistant')} <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
