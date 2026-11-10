@@ -44,6 +44,61 @@ export function judgeListing({ source, status, finalUrl = '', html = '', now = n
   return { status: 'unknown', reason: 'sayfa tanınmadı' };
 }
 
+// ---- Çalışma şekli ve şehir (ilan sayfasından) --------------------------------------
+const MODE_WORDS = [
+  ['remote', /^(uzaktan|remote|evden|tamamen uzaktan|full remote)/],
+  ['hybrid', /^(hibrit|hybrid)/],
+  ['onsite', /^(ofisten|ofis|ofiste|iş yerinde|işyerinde|yerinde|on-?site|office|in-office)/],
+];
+const modeOf = (word) => MODE_WORDS.find(([, re]) => re.test(String(word || '').trim().toLocaleLowerCase('tr')))?.[0] || null;
+const stripTags = (html) => String(html).replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;|&#160;/g, ' ').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
+// "Çalışma Modeli: Ofisten", "Work model - Hybrid", "Çalışma Şekli: Uzaktan"
+const LABELED = /(?:çalışma\s*(?:model(?:i)?|şekli|tipi|biçimi|düzeni|tercihi)|work(?:ing)?\s*(?:model|type|arrangement|mode|style)|workplace(?:\s*type)?)\s*[:：\-–*]*\s*(tamamen uzaktan|uzaktan|remote|evden|hibrit|hybrid|ofisten|ofiste|ofis|iş yerinde|işyerinde|on-?site|office)/i;
+const STRONG = [
+  ['remote', /(tamamen uzaktan|%100 uzaktan|100% remote|fully remote|uzaktan çalışma modeli|remote position)/i],
+  ['hybrid', /(hibrit çalışma|hybrid work|hibrit model|hybrid model)/i],
+  ['onsite', /(ofisten çalışma|iş yerinde çalışma|on-site position|ofis ortamında tam zamanlı)/i],
+];
+
+/** İlan sayfasından çalışma şekli ve şehir; emin olunamazsa null. */
+export function extractWorkInfo({ source, html }) {
+  const raw = String(html || '');
+  let mode = null;
+  let city = null;
+  if (source === 'kariyer') {
+    // Sayfadaki ilk workmodeltext ilanın kendisine aittir (sonrakiler "benzer ilanlar").
+    mode = modeOf((raw.match(/workmodeltext="([^"]+)"/i) || [])[1]);
+  } else if (source === 'linkedin') {
+    const bullet = stripTags((raw.match(/topcard__flavor--bullet[^>]*>([\s\S]*?)<\/span>/i) || [])[1] || '').trim();
+    if (bullet) {
+      const inParen = (bullet.match(/\(([^)]+)\)/) || [])[1];
+      if (inParen) mode = modeOf(inParen);
+      city = bullet.replace(/\([^)]*\)/g, '').split(',')[0].trim() || null;
+    }
+    if (!mode) {
+      const text = stripTags((raw.match(/show-more-less-html__markup[^>]*>([\s\S]*?)<\/div>/i) || [])[1] || raw);
+      const labeled = text.match(LABELED);
+      if (labeled) mode = modeOf(labeled[1]);
+      else {
+        const hits = STRONG.filter(([, re]) => re.test(text)).map(([m]) => m);
+        if (hits.length === 1) mode = hits[0];
+      }
+    }
+  }
+  return { mode, city };
+}
+
+const MODE_LABEL = { remote: 'Uzaktan', hybrid: 'Hibrit', onsite: 'Ofiste' };
+const HAS_MODE = /(uzaktan|remote|hibrit|hybrid|ofis|on-?site|yerinde)/i;
+/** Konum metnine eksik çalışma şeklini / şehri ekler: "İstanbul" + ofis → "İstanbul (Ofiste)". */
+export function mergeLocation(location, { mode, city }) {
+  const loc = String(location || '').trim();
+  if (HAS_MODE.test(loc) || (!mode && (loc || !city))) return loc || null;
+  const base = loc || city || '';
+  const out = `${base}${mode ? `${base ? ' ' : ''}(${MODE_LABEL[mode]})` : ''}`.trim();
+  return out.slice(0, 80) || null;
+}
+
 /** LinkedIn misafir ilan uç noktası: giriş istemeyen, yalnızca ilan kartını döndüren küçük sayfa. */
 export function checkUrlFor(url) {
   const canon = canonicalJobUrl(url);
@@ -71,7 +126,8 @@ export function createListingChecker({ fetchImpl = fetch, timeoutMs = 9_000, max
           continue;
         }
         const html = res.status === 200 ? (await res.text()).slice(0, maxBytes) : '';
-        return judgeListing({ source: target.source, status: res.status, finalUrl: current, html, now });
+        const verdict = judgeListing({ source: target.source, status: res.status, finalUrl: current, html, now });
+        return verdict.status === 'open' ? { ...verdict, ...extractWorkInfo({ source: target.source, html }) } : verdict;
       }
       return { status: 'unknown', reason: 'çok fazla yönlendirme' };
     } catch {
@@ -83,6 +139,8 @@ export function createListingChecker({ fetchImpl = fetch, timeoutMs = 9_000, max
 }
 
 const RECHECK_MS = 12 * 3600 * 1000;
+// Çalışma şekli okuması bu tarihte eklendi: konumunda çalışma şekli olmayan ilanlara bir kez daha bakılır.
+const WORK_INFO_SINCE = '2026-11-10T13:30:00.000Z';
 const MAX_AGE_MS = 45 * 86_400_000;
 
 /**
@@ -97,13 +155,17 @@ export async function refreshListings({ supabase, checkListing, userId, limit = 
   try {
     rows = await supabase.select(
       'alert_jobs',
-      `user_id=eq.${enc(userId)}&received_at=gte.${enc(new Date(now.getTime() - MAX_AGE_MS).toISOString())}&or=(status.is.null,status.neq.closed)&select=id,url,checked_at&order=checked_at.asc.nullsfirst&limit=${limit * 3}`,
+      `user_id=eq.${enc(userId)}&received_at=gte.${enc(new Date(now.getTime() - MAX_AGE_MS).toISOString())}&or=(status.is.null,status.neq.closed)&select=id,url,location,checked_at&order=checked_at.asc.nullsfirst&limit=${limit * 3}`,
     );
   } catch {
     return { checked: 0, closed: 0, skipped: 'no_columns' };
   }
   const due = rows
-    .filter((r) => r.status !== 'closed' && (!r.checked_at || now.getTime() - new Date(r.checked_at).getTime() > RECHECK_MS))
+    .filter(
+      (r) =>
+        r.status !== 'closed' &&
+        (!r.checked_at || now.getTime() - new Date(r.checked_at).getTime() > RECHECK_MS || (!HAS_MODE.test(r.location || '') && r.checked_at < WORK_INFO_SINCE)),
+    )
     .sort((a, b) => String(a.checked_at || '').localeCompare(String(b.checked_at || '')))
     .slice(0, limit);
   let i = 0;
@@ -116,6 +178,8 @@ export async function refreshListings({ supabase, checkListing, userId, limit = 
         const patch = { checked_at: now.toISOString() };
         if (r.status !== 'unknown') patch.status = r.status;
         if (r.status === 'closed') { patch.closed_reason = r.reason; closed++; }
+        const location = mergeLocation(row.location, r);
+        if (location && location !== (row.location || null)) patch.location = location;
         await supabase.update('alert_jobs', `id=eq.${enc(row.id)}&user_id=eq.${enc(userId)}`, patch).catch((err) => log?.warn('listing_update_failed', { error: err.message }));
       }
     }),

@@ -9,7 +9,7 @@ import { createApp } from '../src/app.js';
 import { canonicalJobUrl, extractJobs, parseForwardingConfirmation, findAlertCode, detectSource, htmlToText, handleInboundEmail } from '../src/automation/alerts.js';
 import { verifySvix } from '../src/automation/mailer.js';
 import { buildSummary, sendDailySummary, summaryHeadline } from '../src/automation/summary.js';
-import { judgeListing, checkUrlFor, createListingChecker, refreshListings, parseTrDate } from '../src/automation/liveness.js';
+import { judgeListing, checkUrlFor, createListingChecker, refreshListings, parseTrDate, extractWorkInfo, mergeLocation } from '../src/automation/liveness.js';
 
 const UID = '33333333-3333-4333-8333-333333333333';
 const CODE = 'abc123def4';
@@ -345,4 +345,16 @@ test('summary subject greets by first name and names the best match', () => {
   assert.equal(summaryHeadline({ name: '', pending: [], good: [], rest: [] }).subject, 'Bugün sana uygun yeni ilan çıkmadı');
   assert.equal(summaryHeadline({ name: 'Ali', pending: [], good: [], rest: [{ title: 'x', score: 10 }] }).subject, 'Ali, 1 yeni ilan geldi, ama hiçbiri tam sana göre değil');
   assert.equal(summaryHeadline({ name: 'Ali', pending: [{ company: 'Atlas', position: 'Analist' }], good: [], rest: [] }).subject, 'Ali, 1 başvurun hazır, göndermek için onayını bekliyor');
+});
+
+test('work mode is read from the listing page when the alert e-mail lacks it', () => {
+  const li = '<span class="topcard__flavor topcard__flavor--bullet"> İstanbul, Türkiye </span><div class="show-more-less-html__markup"><p>Lokasyon: Şişli, İstanbul</p><p>**Çalışma Model Ofisten</p></div>';
+  assert.deepEqual(extractWorkInfo({ source: 'linkedin', html: li }), { mode: 'onsite', city: 'İstanbul' });
+  assert.equal(extractWorkInfo({ source: 'linkedin', html: '<span class="topcard__flavor--bullet">Ankara (Hybrid)</span>' }).mode, 'hybrid');
+  assert.equal(extractWorkInfo({ source: 'linkedin', html: '<div class="show-more-less-html__markup">tamamen uzaktan ve hibrit çalışma</div>' }).mode, null); // çelişkili → belirtilmemiş
+  assert.equal(extractWorkInfo({ source: 'kariyer', html: 'workmodeltext="İş Yerinde" … benzer: workmodeltext="Hibrit"' }).mode, 'onsite');
+  assert.equal(mergeLocation('İstanbul', { mode: 'onsite' }), 'İstanbul (Ofiste)');
+  assert.equal(mergeLocation('İstanbul (Hibrit)', { mode: 'onsite' }), 'İstanbul (Hibrit)'); // e-postadaki bilgi korunur
+  assert.equal(mergeLocation('', { mode: 'remote', city: 'İzmir' }), 'İzmir (Uzaktan)');
+  assert.equal(mergeLocation(null, {}), null);
 });
