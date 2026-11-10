@@ -1,7 +1,8 @@
 // Başvuru asistanı: giriş → onay → panel / kurulum sihirbazı.
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { warmUp } from '../../lib/api.js';
 import { authConfigured, signInWithGoogle, signInWithIdToken, completeRedirect, getSession, onAuthChange, signOut } from '../../lib/auth.js';
-import { googleConfigured, renderGoogleButton } from '../../lib/google.js';
+import { googleConfigured, renderGoogleButton, takeGsiRedirect, inAppBrowser } from '../../lib/google.js';
 import { getMe, updateMe, getInbox, markInboxRead, addTargetRole } from '../../lib/automationApi.js';
 import { navigate } from '../../router.js';
 import { Shell, TopBar, Footer, Spinner } from '../../hz/ui.jsx';
@@ -15,6 +16,10 @@ export function SignIn({ error }) {
   const btn = useRef(null);
   const [err, setErr] = useState(error || null);
   const [busy, setBusy] = useState(false);
+  const [inApp] = useState(() => { try { return inAppBrowser(); } catch { return false; } });
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => { warmUp(); }, []); // ücretsiz sunucu uyanık olsun; Google dönüşü beklemeden işlensin
 
   useEffect(() => {
     if (!googleConfigured || !btn.current) return;
@@ -40,6 +45,12 @@ export function SignIn({ error }) {
         <section className="hz-sheet hz-pad" style={{ display: 'grid', gap: 18 }}>
           <h2 className="hz-h2">Giriş yap</h2>
           <p className="hz-small">Gmail'inden e-posta gönderme izni şimdi istenmez; kurulumun sonunda ayrıca sorulur.</p>
+          {inApp && (
+            <div className="hz-notice" role="alert" style={{ display: 'grid', gap: 10 }}>
+              <span>Bu sayfa bir uygulamanın içindeki tarayıcıda açıldı; Google burada girişe izin vermiyor. Sağ üstteki menüden <strong>"Tarayıcıda aç"</strong> (Safari / Chrome) seçeneğine dokun.</span>
+              <button type="button" className="hz-btn hz-btn-sm" style={{ justifySelf: 'start' }} onClick={() => { navigator.clipboard?.writeText(window.location.href).then(() => setCopied(true)).catch(() => {}); }}>{copied ? 'Bağlantı kopyalandı' : 'Bağlantıyı kopyala'}</button>
+            </div>
+          )}
           {googleConfigured ? (
             <div ref={btn} className="hz-gbtn" style={{ opacity: busy ? 0.5 : 1 }} />
           ) : (
@@ -278,6 +289,11 @@ export default function AutomationApp() {
   useEffect(() => {
     if (!authConfigured) return;
     completeRedirect()
+      .then(async () => {
+        const gsi = takeGsiRedirect();
+        if (gsi?.error) throw new Error(gsi.error);
+        if (gsi) await signInWithIdToken(gsi);
+      })
       .catch((e) => setErr(e.message))
       .then(() => getSession())
       .then(setSession);

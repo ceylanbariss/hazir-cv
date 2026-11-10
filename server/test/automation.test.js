@@ -222,3 +222,22 @@ test('CORS preflight allows PUT and DELETE for the panel', async () => {
   assert.match(r.headers.get('access-control-allow-methods') || '', /PUT/);
   assert.match(r.headers.get('access-control-allow-methods') || '', /DELETE/);
 });
+
+test('google redirect callback checks the CSRF cookie and returns the token in the fragment', async () => {
+  const jwt = 'aaa.bbb.ccc';
+  const ok = await fetch(`${base}/google/callback`, {
+    method: 'POST',
+    redirect: 'manual',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: 'g_csrf_token=xyz; other=1' },
+    body: `credential=${jwt}&g_csrf_token=xyz`,
+  });
+  assert.equal(ok.status, 303);
+  assert.match(ok.headers.get('location'), /\/otomasyon#gsi=aaa\.bbb\.ccc$/);
+  const bad = await fetch(`${base}/google/callback`, {
+    method: 'POST',
+    redirect: 'manual',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: 'g_csrf_token=nope' },
+    body: `credential=${jwt}&g_csrf_token=xyz`,
+  });
+  assert.match(bad.headers.get('location'), /#gsi_error=csrf$/);
+});
