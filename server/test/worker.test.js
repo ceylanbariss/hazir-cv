@@ -11,7 +11,7 @@ import { createSealer } from '../src/automation/crypto.js';
 import { buildMime, encodeHeader } from '../src/automation/gmail.js';
 import { dailyQueries } from '../src/automation/search.js';
 import { validEmails, isPublicUrl, emailsIn, rootName, shouldSkip, createPageReader } from '../src/automation/pages.js';
-import { checkVerdict, fixLetter, listDueUsers, dayStart, trHour, autoSlots } from '../src/automation/worker.js';
+import { checkVerdict, fixLetter, fixPhrases, listDueUsers, dayStart, trHour, autoSlots } from '../src/automation/worker.js';
 
 const UID = '22222222-2222-4222-8222-222222222222';
 const USERS = { 'tok-b': { id: UID, email: 'b@x.com', user_metadata: { full_name: 'Barış Deneme' } } };
@@ -65,7 +65,7 @@ function fakeSupabase() {
 const PAGES = {
   'https://atlas.com.tr/kariyer/is-analisti': {
     title: 'İş Analisti ilanı – Atlas', snippet: 'Özgeçmişinizi ik@atlas.com.tr adresine gönderin',
-    text: 'Atlas Yazılım İş Analisti pozisyonu ilanı. SQL ve süreç analizi. Özgeçmişinizi ik@atlas.com.tr adresine gönderin.', emails: ['ik@atlas.com.tr'],
+    text: 'Atlas Yazılım İş Analisti pozisyonu ilanı. İstanbul ofisimizde hibrit çalışma. SQL ve süreç analizi. Özgeçmişinizi ik@atlas.com.tr adresine gönderin.', emails: ['ik@atlas.com.tr'],
   },
   'https://kuzey.com/hakkimizda': {
     title: 'Kuzey Kimya', snippet: 'kimya', text: 'Kimya üretimi. info@kuzey.com', emails: ['info@kuzey.com'],
@@ -196,6 +196,8 @@ test('worker drafts approval-pending applications and runs at most three times a
   assert.equal(app.status, 'pending_approval');
   assert.equal(app.recipient, 'ik@atlas.com.tr');
   assert.equal(app.company_key, 'atlas');
+  assert.equal(app.work_mode, 'hybrid'); // sayfadan okunan çalışma şekli ve şehir
+  assert.equal(app.city, 'İstanbul');
   assert.match(app.cover_letter, /Saygılarımla,\nBarış Deneme$/);
   assert.equal(sb.db.discoveries.length, 2);
   assert.equal(sb.db.inbox_items.at(-1).kind, 'needs_approval');
@@ -351,4 +353,13 @@ test('page reader finds the HR address on the company career page when the listi
   const none = await read({ url: 'https://bos.com.tr/', title: '', snippet: '' });
   assert.deepEqual(none.emails, []);
   assert.equal(asked.length, 1 + 5);
+});
+
+test('cover letter phrasing: "takip ediyorum" becomes "büyük bir ilgiyle inceledim"', () => {
+  assert.equal(fixPhrases("NetSystem'in otomasyon çalışmalarını yakından takip ediyorum."), "NetSystem'in otomasyon çalışmalarını büyük bir ilgiyle inceledim.");
+  assert.equal(fixPhrases('Projelerinizi ilgiyle takip ediyorum ve'), 'Projelerinizi büyük bir ilgiyle inceledim ve');
+  assert.equal(fixPhrases('Çalışmalarınızı büyük bir ilgiyle takip ediyorum.'), 'Çalışmalarınızı büyük bir ilgiyle inceledim.');
+  assert.equal(fixPhrases('Ürünlerinizi takip etmekteyim.'), 'Ürünlerinizi büyük bir ilgiyle inceledim.');
+  assert.equal(fixPhrases('Hiç değişmeyen cümle.'), 'Hiç değişmeyen cümle.');
+  assert.match(fixLetter('Merhaba, Çalışmalarınızı yakından takip ediyorum. CV ektedir.', 'Barış Ceylan'), /büyük bir ilgiyle inceledim/);
 });

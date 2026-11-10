@@ -90,6 +90,7 @@ const handlers = {
     return respond({
       kind, company: 'Test A.Ş.', position: 'İş Analisti', score: irrelevant ? 10 : 82, reason: 'Profil ile uyumlu.',
       email: emails[0] || '', cv_id: cvId, subject: 'İş Analisti Başvurusu', in_turkey: true, real_company: true, career_product: false,
+      work_mode: /uzaktan|remote/i.test(page) ? 'remote' : /hibrit|hybrid/i.test(page) ? 'hybrid' : 'unknown', city: /stanbul/.test(page) ? 'İstanbul' : '',
       cover_letter: 'Merhaba,\n\nİlanınızı gördüm ve başvurmak istiyorum.\n\nDeneyimlerim ilanla örtüşüyor. CV\'m ektedir.\n\nSaygılarımla,\nAyşe',
     });
   },

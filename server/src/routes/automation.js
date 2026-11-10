@@ -10,7 +10,7 @@ import { requireUser } from '../automation/auth.js';
 import { runTask } from '../llm/runTask.js';
 import * as P from '../automation/prompts.js';
 import { buildMime } from '../automation/gmail.js';
-import { runForUser, listDueUsers, dayStart, autoSlots } from '../automation/worker.js';
+import { runForUser, listDueUsers, dayStart, autoSlots, fixPhrases } from '../automation/worker.js';
 import { handleInboundEmail } from '../automation/alerts.js';
 import { sendDailySummary } from '../automation/summary.js';
 import { verifySvix } from '../automation/mailer.js';
@@ -346,10 +346,13 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget,
     const statuses = status.split(',').filter((x) => APP_STATUSES.includes(x));
     const filter = statuses.length ? `&status=in.(${statuses.join(',')})` : '';
     const limit = Math.min(Number(req.query.limit) || 50, 200);
-    const items = await supabase.select('applications', `user_id=eq.${uid(req)}${filter}&select=${APP_FIELDS}&order=created_at.desc&limit=${limit}`);
+    const q = `user_id=eq.${uid(req)}${filter}&order=created_at.desc&limit=${limit}`;
+    const items = await supabase
+      .select('applications', `${q}&select=${APP_FIELDS},work_mode,city`)
+      .catch(() => supabase.select('applications', `${q}&select=${APP_FIELDS}`)); // sütunlar henüz yoksa
     const cvs = await listCvs(req);
     const label = Object.fromEntries(cvs.map((c) => [c.id, c.label]));
-    res.json({ items: items.map((a) => ({ ...a, cv_label: label[a.cv_id] || null })) });
+    res.json({ items: items.map((a) => ({ ...a, cover_letter: a.status === 'pending_approval' ? fixPhrases(a.cover_letter) : a.cover_letter, cv_label: label[a.cv_id] || null })) });
   });
 
   const ownedApp = async (req) => {
@@ -386,7 +389,7 @@ export function automationRouter({ supabase, limiter, heavyLimiter, llm, budget,
     try {
       const access = await gmail.accessToken(sealer.decrypt(conn.refresh_token_enc));
       const bytes = await supabase.download('cvs', cv.storage_path);
-      const mime = buildMime({ from: conn.google_email, fromName: fullName, to: app.recipient, subject: app.subject, text: app.cover_letter, attachment: { filename: pdfName(fullName), bytes } });
+      const mime = buildMime({ from: conn.google_email, fromName: fullName, to: app.recipient, subject: app.subject, text: fixPhrases(app.cover_letter), attachment: { filename: pdfName(fullName), bytes } });
       await gmail.send(access, mime);
     } catch (err) {
       if (err.code === 'GMAIL_REVOKED') await supabase.remove('gmail_connections', `user_id=eq.${uid(req)}`);

@@ -21,15 +21,37 @@ export const dayStart = (now) => {
   return new Date(Date.UTC(tr.getUTCFullYear(), tr.getUTCMonth(), tr.getUTCDate()) - TR_OFFSET_MS).toISOString();
 };
 
+/**
+ * Kullanıcının tercih ettiği ifadeler: "yakından / ilgiyle takip ediyorum" → "büyük bir ilgiyle inceledim".
+ * Hem yeni taslaklarda hem gönderimden önce kayıtlı taslaklarda uygulanır.
+ */
+export function fixPhrases(text) {
+  return String(text || '')
+    .replace(/(?:büyük bir |yakından |ilgiyle |ilgi ile |dikkatle )+(?:takip ediyorum|takip etmekteyim|izliyorum|izlemekteyim)/gi, 'büyük bir ilgiyle inceledim')
+    .replace(/(?:büyük bir |yakından |ilgiyle |ilgi ile )+(?:takip ettim|izledim)/gi, 'büyük bir ilgiyle inceledim')
+    .replace(/\b(?:takip ediyorum|takip etmekteyim)\b/gi, 'büyük bir ilgiyle inceledim');
+}
+
 /** Normalises the signature and paragraphing of a generated cover letter. */
 export function fixLetter(text, fullName) {
-  let t = String(text || '').trim().replace(/\r\n/g, '\n');
+  let t = fixPhrases(String(text || '').trim().replace(/\r\n/g, '\n'));
   t = t.replace(/^(Merhaba[^,\n]{0,30},)\s*/, '$1\n\n');
   t = t.replace(/\[[^\]]*(ad|isim|name)[^\]]*\]/gi, fullName);
   let body = t.split(/\n\s*(Saygılarımla|Saygılar)\b/)[0].trimEnd();
   if (fullName && body.replace(/[ ,.]+$/, '').endsWith(fullName)) body = body.slice(0, body.lastIndexOf(fullName)).trimEnd();
   if (body && !/[.!?]$/.test(body)) body += '.';
   return fullName ? `${body}\n\nSaygılarımla,\n${fullName}` : `${body}\n\nSaygılarımla,`;
+}
+
+/** Çalışma şekli / şehir sütunları henüz yoksa (eski veritabanı) onlarsız kaydeder. */
+async function insertApplication(supabase, row) {
+  try {
+    return await supabase.insert('applications', [row]);
+  } catch (err) {
+    const { work_mode: _w, city: _c, ...rest } = row;
+    if (!('work_mode' in row)) throw err;
+    return supabase.insert('applications', [rest]);
+  }
 }
 
 /** Applies the server-side safety rules to the model's verdict. Returns { kind, warnings }. */
@@ -244,8 +266,10 @@ export async function runForUser({ supabase, llm, budget, search, readPage, log,
         continue;
       }
       blocked.add(companyKey);
-      await supabase.insert('applications', [
-        {
+      const WORK_MODES = new Set(['remote', 'hybrid', 'onsite']);
+      const where = { work_mode: WORK_MODES.has(v.work_mode) ? v.work_mode : null, city: String(v.city || '').trim().slice(0, 60) || null };
+      await insertApplication(supabase, {
+          ...where,
           user_id: userId,
           company: (v.company || hostOf(page.url)).slice(0, 120),
           company_key: companyKey,
@@ -260,8 +284,7 @@ export async function runForUser({ supabase, llm, budget, search, readPage, log,
           subject: (v.subject || `Başvuru – ${fullName}`).replace(/\s+/g, ' ').slice(0, 150),
           cv_id: cvIds.has(v.cv_id) ? v.cv_id : main.id,
           status: 'pending_approval',
-        },
-      ]);
+      });
       stats.drafted++;
       todayCount++;
       emit('draft', `Uygun buldum — ${label} (${v.score} puan). Ön yazıyı hazırladım, onayına sundum.`, pct + 3);
