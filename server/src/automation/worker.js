@@ -21,9 +21,20 @@ export const dayStart = (now) => {
   return new Date(Date.UTC(tr.getUTCFullYear(), tr.getUTCMonth(), tr.getUTCDate()) - TR_OFFSET_MS).toISOString();
 };
 
+/**
+ * Kullanıcının tercih ettiği ifadeler: "yakından / ilgiyle takip ediyorum" → "büyük bir ilgiyle inceledim".
+ * Hem yeni taslaklarda hem gönderimden önce kayıtlı taslaklarda uygulanır.
+ */
+export function fixPhrases(text) {
+  return String(text || '')
+    .replace(/(?:büyük bir |yakından |ilgiyle |ilgi ile |dikkatle )+(?:takip ediyorum|takip etmekteyim|izliyorum|izlemekteyim)/gi, 'büyük bir ilgiyle inceledim')
+    .replace(/(?:büyük bir |yakından |ilgiyle |ilgi ile )+(?:takip ettim|izledim)/gi, 'büyük bir ilgiyle inceledim')
+    .replace(/\b(?:takip ediyorum|takip etmekteyim)\b/gi, 'büyük bir ilgiyle inceledim');
+}
+
 /** Normalises the signature and paragraphing of a generated cover letter. */
 export function fixLetter(text, fullName) {
-  let t = String(text || '').trim().replace(/\r\n/g, '\n');
+  let t = fixPhrases(String(text || '').trim().replace(/\r\n/g, '\n'));
   t = t.replace(/^(Merhaba[^,\n]{0,30},)\s*/, '$1\n\n');
   t = t.replace(/\[[^\]]*(ad|isim|name)[^\]]*\]/gi, fullName);
   let body = t.split(/\n\s*(Saygılarımla|Saygılar)\b/)[0].trimEnd();
