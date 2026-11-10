@@ -319,9 +319,9 @@ test('closed listings: refreshed in the background, marked in İlanlar, left out
   const again = await (await fetch(`${base}/alerts/check`, { method: 'POST', headers: { Authorization: 'Bearer tok' } })).json();
   assert.equal(again.skipped, 'throttled');
   // 12 saat geçmeden aynı ilan tekrar kontrol edilmez; kapanmış ilan hiç tekrar edilmez.
-  const r2 = await refreshListings({ supabase: sb, checkListing: fakeChecker, userId: UID, now: new Date(fresh.getTime() + 3600_000) });
+  const r2 = await refreshListings({ supabase: sb, checkListing: fakeChecker, userId: UID, now: new Date(fresh.getTime() + 3600_000), workInfoSince: '2000-01-01' });
   assert.equal(r2.checked, 0);
-  const r3 = await refreshListings({ supabase: sb, checkListing: fakeChecker, userId: UID, now: new Date(fresh.getTime() + 13 * 3600_000) });
+  const r3 = await refreshListings({ supabase: sb, checkListing: fakeChecker, userId: UID, now: new Date(fresh.getTime() + 13 * 3600_000), workInfoSince: '2000-01-01' });
   assert.equal(r3.checked, 1);
 
   const mail = await sendDailySummary({ supabase: sb, mailer, config: { APP_URL: 'https://hazircv.com.tr' }, userId: UID, now: fresh, stats: { searches: 1, drafted: 0 } });

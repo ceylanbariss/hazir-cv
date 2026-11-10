@@ -148,7 +148,7 @@ const MAX_AGE_MS = 45 * 86_400_000;
  * ve son 12 saatte bakılmamış ilanlar. Sütunlar henüz yoksa (eski veritabanı) sessizce atlar.
  * @returns {{ checked: number, closed: number, skipped?: string }}
  */
-export async function refreshListings({ supabase, checkListing, userId, limit = 20, now = new Date(), log, concurrency = 3 }) {
+export async function refreshListings({ supabase, checkListing, userId, limit = 20, now = new Date(), log, concurrency = 3, workInfoSince = WORK_INFO_SINCE }) {
   if (!checkListing) return { checked: 0, closed: 0, skipped: 'no_checker' };
   const enc = encodeURIComponent;
   let rows;
@@ -164,7 +164,7 @@ export async function refreshListings({ supabase, checkListing, userId, limit = 
     .filter(
       (r) =>
         r.status !== 'closed' &&
-        (!r.checked_at || now.getTime() - new Date(r.checked_at).getTime() > RECHECK_MS || (!HAS_MODE.test(r.location || '') && r.checked_at < WORK_INFO_SINCE)),
+        (!r.checked_at || now.getTime() - new Date(r.checked_at).getTime() > RECHECK_MS || (!HAS_MODE.test(r.location || '') && r.checked_at < workInfoSince)),
     )
     .sort((a, b) => String(a.checked_at || '').localeCompare(String(b.checked_at || '')))
     .slice(0, limit);
