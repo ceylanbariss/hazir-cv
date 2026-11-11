@@ -28,6 +28,10 @@ const GSI_REDIRECT_ENABLED = false;
 
 /** Telefon ve tabletlerde açılır pencere (popup) güvenilir değil: aynı sekmede yönlendirme kullanılır. */
 export const useRedirectMode = () => {
+  try {
+    const forced = sessionStorage.getItem('hazircv.gsi.mode'); // test için: 'redirect' | 'popup'
+    if (forced) return forced === 'redirect';
+  } catch { /* özel pencere */ }
   if (!GSI_REDIRECT_ENABLED) return false;
   try {
     return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || window.matchMedia('(pointer: coarse)').matches;
