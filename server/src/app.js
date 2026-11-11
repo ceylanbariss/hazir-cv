@@ -39,7 +39,10 @@ export function createApp({ config, llm, logger, budget, semaphore, limiters, su
   app.set('trust proxy', config.TRUST_PROXY);
   app.use(requestContext(logger));
   app.use(securityHeaders());
-  app.use(cors(corsOptions(config)));
+  // Google girişinin yönlendirme dönüşü accounts.google.com kökenli bir form gönderimidir (tarayıcı gezintisi,
+  // CORS isteği değil); kendi CSRF denetimi vardır. Diğer her yol köken denetiminden geçer.
+  const corsMw = cors(corsOptions(config));
+  app.use((req, res, next) => (req.method === 'POST' && req.path === '/api/v1/automation/google/callback' ? next() : corsMw(req, res, next)));
 
   app.get('/', (req, res) => res.json({ service: 'hazircv-api', status: 'ok', docs: '/api/v1/health' }));
   const db =
