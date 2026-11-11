@@ -228,7 +228,7 @@ test('google redirect callback checks the CSRF cookie and returns the token in t
   const ok = await fetch(`${base}/google/callback`, {
     method: 'POST',
     redirect: 'manual',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Cookie: 'g_csrf_token=xyz; other=1' },
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: 'https://accounts.google.com', Cookie: 'g_csrf_token=xyz; other=1' },
     body: `credential=${jwt}&g_csrf_token=xyz`,
   });
   assert.equal(ok.status, 303);
