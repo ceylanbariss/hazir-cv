@@ -24,7 +24,7 @@ const NONCE_KEY = 'hazircv.gsi.nonce';
 
 // Yönlendirme modu, giriş adresi (…/api/v1/automation/google/callback) Google Cloud'da OAuth istemcisinin
 // "Yetkilendirilmiş yönlendirme URI'leri" listesine eklendikten sonra açılır; eklenmeden açılırsa Google hata verir.
-const GSI_REDIRECT_ENABLED = false;
+const GSI_REDIRECT_ENABLED = true;
 
 /** Telefon ve tabletlerde açılır pencere (popup) güvenilir değil: aynı sekmede yönlendirme kullanılır. */
 export const useRedirectMode = () => {
